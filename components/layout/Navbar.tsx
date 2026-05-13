@@ -4,15 +4,16 @@ import { usePathname } from "next/navigation";
 import { Network, BookOpen, ShoppingBag, LayoutDashboard, Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
+import { type Language } from "@/lib/i18n";
 
-export default function Navbar() {
+export default function Navbar({ language = "en" }: { language?: Language }) {
   const path = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const links = [
-    { href: "/dashboard",    label: "Dashboard",    icon: LayoutDashboard },
-    { href: "/buyer-portal", label: "Buyer Portal", icon: ShoppingBag },
-    { href: "/ecosystem",    label: "Ecosystem",    icon: Network },
-    { href: "/documentation",label: "Docs",         icon: BookOpen },
+    { href: `/${language}/dashboard`,    label: "Dashboard",    icon: LayoutDashboard },
+    { href: `/${language}/buyer-portal`, label: "Buyer Portal", icon: ShoppingBag },
+    { href: `/${language}/ecosystem`,    label: "Ecosystem",    icon: Network },
+    { href: `/${language}/documentation`,label: "Docs",         icon: BookOpen },
   ];
 
   // Close mobile menu on route change
@@ -23,7 +24,7 @@ export default function Navbar() {
   return (
     <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/80 shadow-[0_8px_22px_rgb(15,23,42,0.08)] backdrop-blur-2xl">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2.5">
+        <Link href={`/${language}`} className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-200 via-sky-300 to-teal-200 flex items-center justify-center shadow-md shadow-cyan-900/40">
             <span className="text-[#072033] text-xs font-bold">WE</span>
           </div>

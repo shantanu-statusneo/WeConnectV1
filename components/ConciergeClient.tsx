@@ -9,6 +9,7 @@ import {
   validateRegistration,
 } from "@/lib/registration";
 import { trustLevelLabel, type CertificationType, type ComplianceResult, type TrustReport } from "@/lib/domains/contracts";
+import { getTranslations, getLanguageMetadata, type Language } from "@/lib/i18n";
 import { BlockAnchorAnimation } from "./BlockAnchorAnimation";
 import { CertificateCard, type CertDisplay } from "./CertificateCard";
 import { VoiceConcierge } from "./VoiceConcierge";
@@ -47,12 +48,15 @@ let ttsUnlocked = false;
 let pendingSpeechText: string | null = null;
 const speechQueue: string[] = [];
 let speechActive = false;
+let audioEnabledGlobal = true;
 
-function selectVoice(): SpeechSynthesisVoice | null {
+function selectVoice(langCode: string): SpeechSynthesisVoice | null {
   if (typeof window === "undefined" || !window.speechSynthesis) return null;
   const voices = window.speechSynthesis.getVoices();
   if (!voices.length) return null;
   return (
+    voices.find((v) => v.lang === langCode) ??
+    voices.find((v) => v.lang.startsWith(langCode.split("-")[0])) ??
     voices.find((v) => /en-US|en_US/i.test(v.lang)) ??
     voices.find((v) => /^en/i.test(v.lang)) ??
     voices[0] ??
@@ -60,25 +64,26 @@ function selectVoice(): SpeechSynthesisVoice | null {
   );
 }
 
-function flushSpeechQueue() {
+function flushSpeechQueue(langCode: string) {
   if (typeof window === "undefined" || !window.speechSynthesis) return;
-  if (!ttsUnlocked || speechActive) return;
+  if (!ttsUnlocked || speechActive || !audioEnabledGlobal) return;
   const nextText = speechQueue.shift();
   if (!nextText) return;
+  
   const utterance = new SpeechSynthesisUtterance(nextText);
   utterance.rate = 1;
   utterance.pitch = 1;
-  utterance.lang = "en-US";
-  const voice = selectVoice();
+  utterance.lang = langCode;
+  const voice = selectVoice(langCode);
   if (voice) utterance.voice = voice;
   speechActive = true;
   utterance.onend = () => {
     speechActive = false;
-    flushSpeechQueue();
+    flushSpeechQueue(langCode);
   };
   utterance.onerror = () => {
     speechActive = false;
-    flushSpeechQueue();
+    flushSpeechQueue(langCode);
   };
   window.speechSynthesis.resume();
   window.speechSynthesis.speak(utterance);
@@ -90,7 +95,6 @@ function unlockTtsFromGesture() {
     ttsUnlocked = true;
     window.speechSynthesis.getVoices();
     window.speechSynthesis.resume();
-    // iOS/Safari often needs a priming utterance after a direct user gesture.
     const primer = new SpeechSynthesisUtterance(" ");
     primer.volume = 0;
     window.speechSynthesis.speak(primer);
@@ -99,18 +103,26 @@ function unlockTtsFromGesture() {
       pendingSpeechText = null;
       speechQueue.push(queued);
     }
-    window.setTimeout(() => flushSpeechQueue(), 30);
+    window.setTimeout(() => flushSpeechQueue("en-US"), 30);
   } catch (error) {
     console.warn("[TTS] unlock failed", error);
   }
 }
 
-function speak(text: string) {
+function stopAudio() {
+  if (typeof window === "undefined" || !window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  speechQueue.length = 0;
+  speechActive = false;
+}
+
+function speak(text: string, langCode: string = "en-US") {
   try {
     if (typeof window === "undefined" || !window.speechSynthesis) {
       console.warn("[TTS] speechSynthesis unavailable");
       return;
     }
+    if (!audioEnabledGlobal) return;
     const normalized = text.trim().toLowerCase();
     if (
       normalized === "please continue following the on-screen prompts." ||
@@ -123,7 +135,7 @@ function speak(text: string) {
       return;
     }
     speechQueue.push(text);
-    flushSpeechQueue();
+    flushSpeechQueue(langCode);
   } catch (error) {
     console.warn("[TTS] failed to speak", error);
   }
@@ -373,10 +385,18 @@ async function fetchWithRetry(input: RequestInfo | URL, init: RequestInit, retri
   throw lastError instanceof Error ? lastError : new Error("network error");
 }
 
-export function ConciergeClient({ embed }: { embed?: boolean }) {
+export function ConciergeClient({ embed, language = "en" }: { embed?: boolean; language?: Language }) {
+  const translations = getTranslations(language);
+  const langMeta = getLanguageMetadata(language);
+  
+  // Wrapper to automatically use the correct language code for speech
+  const speakWithLanguage = useCallback((text: string) => {
+    speak(text, langMeta.langCode);
+  }, [langMeta.langCode]);
+  
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [pollingEnabled, setPollingEnabled] = useState(true);
-  const [query, setQuery] = useState("Global Tech Solutions");
+  const [query, setQuery] = useState(translations.intake.placeholder);
   const [match, setMatch] = useState<Match | null>(null);
   const [stage, setStage] = useState<string>("idle");
   const [assistant, setAssistant] = useState<string>("");
@@ -440,20 +460,22 @@ export function ConciergeClient({ embed }: { embed?: boolean }) {
     clients_worked_with: "",
     product_scale: "",
   });
-  const [buyerQuery, setBuyerQuery] = useState("Women-owned textile suppliers in India");
+  const [buyerQuery, setBuyerQuery] = useState(translations.intake.description);
   const [buyerLoading, setBuyerLoading] = useState(false);
   const [buyerRows, setBuyerRows] = useState<BuyerFlowRow[]>([]);
   const [buyerRecommendations, setBuyerRecommendations] = useState<BuyerFlowRow[]>([]);
   const [buyerSelectedId, setBuyerSelectedId] = useState<string | null>(null);
   const [journeyMode, setJourneyMode] = useState<"supplier" | "buyer">("supplier");
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [audioEnabled, setAudioEnabled] = useState(true);
+  const [manualFlowStep, setManualFlowStep] = useState<number | null>(null);
   const lastAutosavedSessionIdRef = useRef<string | null>(null);
   const lastAutosavedPayloadRef = useRef<string>("");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     const onVoicesChanged = () => {
-      if (ttsUnlocked) flushSpeechQueue();
+      if (ttsUnlocked) flushSpeechQueue(langMeta.langCode);
     };
     const unlock = () => unlockTtsFromGesture();
     window.addEventListener("pointerdown", unlock, { passive: true });
@@ -467,7 +489,12 @@ export function ConciergeClient({ embed }: { embed?: boolean }) {
       window.removeEventListener("keydown", unlock);
       window.speechSynthesis?.removeEventListener?.("voiceschanged", onVoicesChanged);
     };
-  }, []);
+  }, [langMeta.langCode]);
+
+  useEffect(() => {
+    audioEnabledGlobal = audioEnabled;
+    if (!audioEnabled) stopAudio();
+  }, [audioEnabled]);
 
   const refreshSession = useCallback(async (sid: string) => {
     const r = await fetch(`/api/session?id=${sid}`);
@@ -788,7 +815,7 @@ export function ConciergeClient({ embed }: { embed?: boolean }) {
       setOwnership(null);
       setOwnershipBreakdown(null);
       setAssistant(j.message ?? "No match.");
-      speak(j.message ?? "No match in the demo registry.");
+      speakWithLanguage(j.message ?? "No match in the demo registry.");
       return;
     }
     setMatch(j.match);
@@ -845,12 +872,12 @@ export function ConciergeClient({ embed }: { embed?: boolean }) {
       const speechMissingLine = missingFromPrefill.length
         ? ` I couldn't fetch ${missingFromPrefill.join(", ")} from SERP and web data. Please fill those manually after confirming the company.`
         : "";
-      speak(`I found multiple matches for ${j.match.companyName}. Please confirm the best candidate.${speechMissingLine}`);
+      speakWithLanguage(`I found multiple matches for ${j.match.companyName}. Please confirm the best candidate.${speechMissingLine}`);
     } else {
       const speechMissingLine = missingFromPrefill.length
         ? ` I couldn't fetch ${missingFromPrefill.join(", ")} from SERP and web data. Please fill those manually.`
         : "";
-      speak(`We have pre-filled your business details. Please confirm and continue.${speechMissingLine}`);
+      speakWithLanguage(`We have pre-filled your business details. Please confirm and continue.${speechMissingLine}`);
     }
   };
 
@@ -879,7 +906,7 @@ export function ConciergeClient({ embed }: { embed?: boolean }) {
     if (j.stage) setStage(j.stage);
     if (j.uiHints?.badge) setBadge(j.uiHints.badge);
     await refreshSession(sessionId);
-    speak(j.assistantText ?? "");
+    speakWithLanguage(j.assistantText ?? "");
     return j;
   };
 
@@ -888,25 +915,25 @@ export function ConciergeClient({ embed }: { embed?: boolean }) {
       const message =
         "Please select the best web candidate and click 'Use selected candidate' before starting verification.";
       setAssistant(message);
-      speak(message);
+      speakWithLanguage(message);
       return;
     }
     if (!registration.country.trim()) {
       const message = "Country is required before verification. Please enter and confirm the country.";
       setAssistant(message);
-      speak(message);
+      speakWithLanguage(message);
       return;
     }
     if (countryRequiresConfirmation && !countryConfirmed) {
       const message = "Please confirm the country field before starting verification.";
       setAssistant(message);
-      speak(message);
+      speakWithLanguage(message);
       return;
     }
     if (activeCertType === "none") {
       const message = "Please choose certification path first (Step 1).";
       setAssistant(message);
-      speak(message);
+      speakWithLanguage(message);
       return;
     }
     if (isSelfPath) {
@@ -921,7 +948,7 @@ export function ConciergeClient({ embed }: { embed?: boolean }) {
           body: JSON.stringify({ sessionId, stage: "doc_upload" }),
         });
       }
-      speak(message);
+      speakWithLanguage(message);
       return;
     }
     await saveRegistration(registration, paid);
@@ -949,7 +976,7 @@ export function ConciergeClient({ embed }: { embed?: boolean }) {
       setAssistant(j.assistantText ?? "");
       if (j.stage) setStage(j.stage);
       await refreshSession(sessionId!);
-      speak(j.assistantText ?? "");
+      speakWithLanguage(j.assistantText ?? "");
       return;
     }
     await callAgent(text);
@@ -996,7 +1023,7 @@ export function ConciergeClient({ embed }: { embed?: boolean }) {
         setCert({ ...j.certificate, revoked: j.certificate.revoked });
         setStage("complete");
         await refreshSession(sessionId);
-        speak("Verification complete. Your certificate is ready.");
+        speakWithLanguage("Verification complete. Your certificate is ready.");
       }
     } catch {
       setAnchorFailureReason("Could not issue certificate. Please retry.");
@@ -1117,7 +1144,7 @@ export function ConciergeClient({ embed }: { embed?: boolean }) {
       const prompt =
         "ID verification complete. Please proceed to the payment gate to continue.";
       setAssistant(prompt);
-      speak(prompt);
+      speakWithLanguage(prompt);
     }
   };
   const verifyDocuments = async (files: File[]) => {
@@ -1154,13 +1181,13 @@ export function ConciergeClient({ embed }: { embed?: boolean }) {
             const message =
               "Self-certification document upload complete. Compliance and trust report are ready. You can issue the certificate.";
             setAssistant(message);
-            speak(message);
+            speakWithLanguage(message);
           } else {
             const message =
               "Documents verified. Please proceed to ID video verification.";
             setStage("vision_id");
             setAssistant(message);
-            speak(message);
+            speakWithLanguage(message);
             await fetch("/api/session", {
               method: "PATCH",
               headers: { "Content-Type": "application/json" },
@@ -1173,12 +1200,12 @@ export function ConciergeClient({ embed }: { embed?: boolean }) {
             const message =
               "Documents uploaded with minor issues. You can continue self-certification and review report flags.";
             setAssistant(message);
-            speak(message);
+            speakWithLanguage(message);
           } else {
             const message =
               "Document verification could not be completed. Please re-upload clearer documents.";
             setAssistant(message);
-            speak(message);
+            speakWithLanguage(message);
           }
         }
       } else {
@@ -1252,32 +1279,33 @@ export function ConciergeClient({ embed }: { embed?: boolean }) {
     cardNumber.replace(/\s+/g, "").length >= 12 && cardExpiry.trim().length >= 4 && cardCvv.length >= 3;
   const flowSteps = isSelfPath
     ? (["Path", "Intake", "Confirm", "Upload", "Compliance", "Trust Report", "Certificate"] as const)
-    : (["Path", "Intake", "Confirm", "Voice", "Upload", "Vision", "Payment", "Certificate"] as const);
-  const currentFlowStep = (() => {
+    : (["Intake", "Confirm", "Voice", "Upload", "Vision", "Payment", "Certificate"] as const);
+  const computedFlowStep = (() => {
     if (cert || stage === "complete") return flowSteps.length - 1;
     if (stage === "anchoring") return flowSteps.length - 1;
     if (activeCertType === "none") return 0;
-    if (!match) return 1;
+    if (!match) return 0;
     if (
       needsCandidateConfirmation ||
       !registration.country.trim() ||
       (countryRequiresConfirmation && !countryConfirmed) ||
       stage === "discovered"
     ) {
-      return 2;
+      return 1;
     }
     if (isSelfPath) {
       if (stage === "doc_upload" && !compliance) return 3;
       if (compliance && !trustReport) return 4;
       if (trustReport && !cert) return 5;
-      return 3;
+      return 2;
     }
-    if (stage === "voice_confirm") return 3;
-    if (stage === "doc_upload") return 4;
-    if (stage === "vision_id") return 5;
-    if (stage === "voice_attestation" || (isDigitalPath && !paid)) return 6;
-    return 3;
+    if (stage === "voice_confirm") return 2;
+    if (stage === "doc_upload") return 3;
+    if (stage === "vision_id") return 4;
+    if (stage === "voice_attestation" || (isDigitalPath && !paid)) return 5;
+    return 2;
   })();
+  const currentFlowStep = manualFlowStep ?? computedFlowStep;
   const paymentUnlocked =
     isSelfPath ||
     stage === "voice_attestation" ||
@@ -1378,15 +1406,15 @@ export function ConciergeClient({ embed }: { embed?: boolean }) {
   })();
   const isFinalStep = currentFlowStep === flowSteps.length - 1;
   const showPathStep = currentFlowStep === 0;
-  const showIntakeStep = currentFlowStep === 1;
-  const showConfirmStep = currentFlowStep === 2;
+  const showIntakeStep = currentFlowStep === 0;
+  const showConfirmStep = currentFlowStep === 1;
   const showVerificationStep = isSelfPath
-    ? currentFlowStep === 3
-    : currentFlowStep >= 3 && currentFlowStep <= 5;
-  const showSelfComplianceStep = isSelfPath && currentFlowStep === 4;
-  const showSelfTrustStep = isSelfPath && currentFlowStep === 5;
-  const showPaymentStep = !isSelfPath && currentFlowStep === 6;
-  const showIssueStep = isSelfPath ? isFinalStep : currentFlowStep >= 7;
+    ? currentFlowStep === 2
+    : currentFlowStep >= 2 && currentFlowStep <= 4;
+  const showSelfComplianceStep = isSelfPath && currentFlowStep === 3;
+  const showSelfTrustStep = isSelfPath && currentFlowStep === 4;
+  const showPaymentStep = !isSelfPath && currentFlowStep === 5;
+  const showIssueStep = isSelfPath ? isFinalStep : currentFlowStep >= 6;
   const showFinalGateStep = showPaymentStep || showIssueStep || anchoring || Boolean(cert);
   const buyerSelected = buyerRows.find((row) => row.supplier.id === buyerSelectedId) ?? null;
   const buyerStepStates = [
@@ -1422,30 +1450,38 @@ export function ConciergeClient({ embed }: { embed?: boolean }) {
         {!embed && (
           <header className="rounded-2xl border border-slate-200 bg-white/85 px-4 sm:px-5 py-3 shadow-[0_14px_36px_rgb(15,23,42,0.12)] backdrop-blur-xl">
             <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-slate-600">
-              <span className="font-medium text-slate-800">WEC-Guardian · demonstration only</span>
-            <div className="flex gap-3">
-              <Link href="/admin" className="font-medium text-cyan-700 transition hover:text-cyan-900">
-                Admin
-              </Link>
-              <Link href="/demo" className="font-medium text-cyan-700 transition hover:text-cyan-900">
-                Split demo
-              </Link>
-            </div>
+              <span className="font-medium text-slate-800">{translations.header.title}</span>
+              <div className="flex gap-2 items-center">
+                <button
+                  type="button"
+                  onClick={() => setAudioEnabled(!audioEnabled)}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-200"
+                  title={audioEnabled ? translations.header.audioDisable : translations.header.audioEnable}
+                >
+                  {audioEnabled ? "🔊" : "🔇"}
+                </button>
+                <Link href="/admin" className="font-medium text-cyan-700 transition hover:text-cyan-900">
+                  {translations.header.admin}
+                </Link>
+                <Link href="/demo" className="font-medium text-cyan-700 transition hover:text-cyan-900">
+                  {translations.header.splitDemo}
+                </Link>
+              </div>
             </div>
           </header>
         )}
 
         <section className="rounded-2xl sm:rounded-3xl border border-slate-200 bg-white/85 p-4 sm:p-6 shadow-[0_16px_40px_rgb(15,23,42,0.12)] backdrop-blur-xl">
-          <p className="text-base font-bold text-slate-900">60 second certificate process</p>
+          <p className="text-base font-bold text-slate-900">{translations.main.certificateProcess}</p>
           <p className="mt-1 text-xs text-slate-600">
-            Build trust from self-declared profile to digitally certified supplier.
+            {translations.main.certificateProcessDesc}
           </p>
           <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
             <span className="rounded-full border border-amber-300/70 bg-amber-100 px-2 py-1 text-amber-700">
-              Demo mode: not legal identity verification
+              {translations.main.demoMode}
             </span>
             <span className="rounded-full border border-cyan-300/70 bg-cyan-100 px-2 py-1 text-cyan-700">
-              Multi-language ready: English, Hindi, Spanish
+              {translations.main.multiLanguageReady}
             </span>
           </div>
         </section>
@@ -1456,7 +1492,7 @@ export function ConciergeClient({ embed }: { embed?: boolean }) {
             {fallbackReasonGuidance(quotaFallbackReason, quotaFallbackSubtype)}
           </p>
         )}
-        {showPathStep && (
+        {/* {showPathStep && (
           <section className="rounded-2xl sm:rounded-3xl border border-slate-200 bg-white/85 p-4 sm:p-6 shadow-[0_14px_36px_rgb(15,23,42,0.1)] backdrop-blur-xl">
             <p className="text-base font-bold text-slate-900">Step 1: Choose certification path</p>
             <p className="mt-1 text-xs text-slate-600">
@@ -1494,10 +1530,10 @@ export function ConciergeClient({ embed }: { embed?: boolean }) {
               </button>
             </div>
           </section>
-        )}
+        )} */}
         {showIntakeStep && (
           <section className="rounded-2xl sm:rounded-3xl border border-slate-200 bg-white/85 p-4 sm:p-6 shadow-[0_14px_36px_rgb(15,23,42,0.1)] backdrop-blur-xl">
-            <h2 className="text-xl font-bold text-slate-900">Step 2: Proactive intake</h2>
+            <h2 className="text-xl font-bold text-slate-900">Proactive intake</h2>
             <p className="mt-1 text-sm text-slate-600">
               Enter a business name or URL. Try <strong className="text-slate-900">Global Tech Solutions</strong>, Nile Logistics, or Red Sand Trading.
             </p>
@@ -1521,25 +1557,236 @@ export function ConciergeClient({ embed }: { embed?: boolean }) {
         )}
         <section className="rounded-2xl sm:rounded-[32px] border border-white/40 bg-white/60 p-4 sm:p-6 shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] backdrop-blur-xl">
           <h2 className="text-xl font-bold tracking-tight text-slate-800">Guided Flow</h2>
-          <p className="mt-2 inline-flex rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-cyan-700">
-            Active step: {currentFlowStep + 1} / {flowSteps.length}
-          </p>
-          <p className="mt-3 text-sm font-semibold text-cyan-900">{nextAction.title}</p>
-          <p className="mt-1 text-xs font-medium text-slate-600">{nextAction.detail}</p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {flowSteps.map((step, index) => (
-              <span
-                key={step}
-                className={`rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-all shadow-sm ${index < currentFlowStep
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-600"
-                  : index === currentFlowStep
-                    ? "border-cyan-300 bg-cyan-500 text-white shadow-cyan-100"
-                    : "border-slate-100 bg-white text-slate-400"
-                  }`}
+          {/* <p className="mt-2 inline-flex rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-cyan-700">
+            Active step: {currentFlowStep} / {flowSteps.length}
+          </p> */}
+          {/* <p className="mt-3 text-sm font-semibold text-cyan-900">{nextAction.title}</p>
+          <p className="mt-1 text-xs font-medium text-slate-600">{nextAction.detail}</p> */}
+          <div className="mt-6 flex flex-col gap-4 lg:flex-row lg:items-start">
+            {/* Registration */}
+            <div className="flex-1 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="mb-3 flex items-start justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-800">
+                      Registration
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Complete initial onboarding
+                    </p>
+                  </div>
+
+                  {currentFlowStep>1 && (
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-white shadow-md shadow-emerald-100">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-4 w-4"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                    </div>
+                  )}
+                </div>
+
+              <div className="flex flex-wrap gap-2">
+                {flowSteps.slice(0, 2).map((step, index) => {
+                  const actualIndex = index;
+
+                  return (
+                    <button
+                      key={step}
+                      type="button"
+                      onClick={() => {
+                        if (actualIndex === 0) {
+                          setCertificationType("none");
+                          setMatch(null);
+                          setRegistration(emptyRegistrationDraft());
+                        } else if (actualIndex === 1 && match) {
+                          setStage("discovered");
+                          setNeedsCandidateConfirmation(false);
+                          setCountryConfirmed(true);
+                        }
+                      }}
+                      className={`cursor-pointer rounded-full border px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-all ${
+                        actualIndex < currentFlowStep
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                          : actualIndex === currentFlowStep
+                          ? "border-cyan-400 bg-cyan-500 text-white shadow-md shadow-cyan-100"
+                          : "border-slate-200 bg-slate-50 text-slate-400"
+                      }`}
+                    >
+                      {actualIndex + 1}. {step}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Arrow */}
+            <div className="hidden lg:flex items-center pt-10 text-slate-300">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-6 w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
               >
-                {index + 1}. {step}
-              </span>
-            ))}
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M13 5l7 7-7 7M5 12h15"
+                />
+              </svg>
+            </div>
+
+            {/* Verification */}
+            <div className="flex-1 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="mb-3 flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-800">
+                    Self Verification
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Verify identity & details
+                  </p>
+                </div>
+                {currentFlowStep>4 && (
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-white shadow-md shadow-emerald-100">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-4 w-4"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                    </div>
+                  )}
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {flowSteps.slice(2, 5).map((step, index) => {
+                  const actualIndex = index + 2;
+
+                  return (
+                    <button
+                      key={step}
+                      type="button"
+                      onClick={() => {
+                        setCountryConfirmed(true);
+                        setNeedsCandidateConfirmation(false);
+                        if (actualIndex === 2) {
+                          if (isSelfPath) setStage("doc_upload");
+                          else setStage("voice_confirm");
+                        } else if (actualIndex === 3) {
+                          setStage("doc_upload");
+                        } else if (actualIndex === 4 && isSelfPath) {
+                          setStage("doc_upload");
+                        } else if (actualIndex === 4) {
+                          setStage("vision_id");
+                        }
+                      }}
+                      className={`cursor-pointer rounded-full border px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-all ${
+                        actualIndex < currentFlowStep
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                          : actualIndex === currentFlowStep
+                          ? "border-violet-400 bg-violet-500 text-white shadow-md shadow-violet-100"
+                          : "border-slate-200 bg-slate-50 text-slate-400"
+                      }`}
+                    >
+                      {actualIndex + 1}. {step}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Arrow */}
+            <div className="hidden lg:flex items-center pt-10 text-slate-300">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-6 w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M13 5l7 7-7 7M5 12h15"
+                />
+              </svg>
+            </div>
+
+            {/* Certification */}
+            <div className="flex-1 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="mb-3 flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-800">
+                    Get Certified
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Final approval & certification
+                  </p>
+                </div>
+                {cert && showIssueStep && (
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-white shadow-md shadow-emerald-100">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-4 w-4"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                    </div>
+                  )}
+              </div>
+              
+              <div className="flex flex-wrap gap-2">
+                {flowSteps.slice(5, 7).map((step, index) => {
+                  const actualIndex = index + 5;
+
+                  return (
+                    <button
+                      key={step}
+                      type="button"
+                      onClick={() => {
+                        if (actualIndex === 5 && !isSelfPath) {
+                          setPaid(true);
+                        } else if (actualIndex === 6) {
+                          setStage("anchoring");
+                        }
+                      }}
+                      className={`cursor-pointer rounded-full border px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-all ${
+                        actualIndex < currentFlowStep
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                          : actualIndex === currentFlowStep
+                          ? "border-amber-400 bg-amber-500 text-white shadow-md shadow-amber-100"
+                          : "border-slate-200 bg-slate-50 text-slate-400"
+                      }`}
+                    >
+                      {actualIndex + 1}. {step}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
           {match && activeCertType !== "none" && (stage === "discovered" || stage === "voice_confirm" || stage === "idle") && (
             <button
@@ -1548,7 +1795,7 @@ export function ConciergeClient({ embed }: { embed?: boolean }) {
               className="mt-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_12px_24px_rgb(8,120,90,0.32)] transition hover:from-emerald-500 hover:to-teal-400"
             >
               {isSelfPath ? "Continue Self-Certification" : "Start 60-second verification"}
-            </button>
+            </button> 
           )}
         </section>
 
@@ -2369,7 +2616,7 @@ export function ConciergeClient({ embed }: { embed?: boolean }) {
                   const pending = mergedBlockers.join(", ");
                   const message = `Cannot issue certificate yet. Pending: ${pending}`;
                   setAssistant(message);
-                  speak(message);
+                  speakWithLanguage(message);
                   return;
                 }
                 setStage("anchoring");
