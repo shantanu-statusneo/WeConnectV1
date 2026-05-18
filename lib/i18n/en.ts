@@ -24,7 +24,7 @@ export const en = {
   intake: {
     title: "Proactive intake",
     description: "Enter a business name or URL. Try Global Tech Solutions, Nile Logistics, or Red Sand Trading.",
-    // placeholder: "Business name or URL",
+    placeholder: "",
     discover: "Discover",
     instruction: "Enter business name or URL and click Discover.",
   },
