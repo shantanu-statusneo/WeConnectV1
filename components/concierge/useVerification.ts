@@ -49,6 +49,7 @@ export function useVerification(
   const [visionBlockers, setVisionBlockers] = useState<string[]>([]);
   const [isVerifyingDocs, setIsVerifyingDocs] = useState(false);
   const [selectedDocuments, setSelectedDocuments] = useState<File[]>([]);
+  const [documentError, setDocumentError] = useState("");
   const [documentProgress, setDocumentProgress] = useState<VerificationProgressStep[]>([]);
   const [videoProgress, setVideoProgress] = useState<VerificationProgressStep[]>([]);
 
@@ -138,6 +139,7 @@ export function useVerification(
   const verifyDocuments = useCallback(async (files: File[]) => {
     if (!sessionId || !files.length) return;
     setIsVerifyingDocs(true);
+    setDocumentError("");
     setDocumentProgress([]);
     try {
       const documents = await Promise.all(
@@ -163,10 +165,22 @@ export function useVerification(
       });
       await progressPromise;
 
-      const { ok, data } = await parseJsonSafe<{ result: { verified: boolean; confidence: number; report: string } }>(res);
+      const { ok, data } = await parseJsonSafe<{
+        result: {
+          verified: boolean;
+          confidence: number;
+          report: string;
+          mismatchReasons?: string[];
+          matchedSignals?: string[];
+        };
+      }>(res);
       if (ok && data?.result) {
         if (data.result.verified) {
-          const message = "Documents verified. Please show a valid ID in the webcam to complete self verification.";
+          setDocumentError("");
+          const signalText = data.result.matchedSignals?.length
+            ? ` Matched: ${data.result.matchedSignals.join(", ")}.`
+            : "";
+          const message = `Documents verified.${signalText} Please show a valid ID in the webcam to complete self verification.`;
           setStage("vision_id");
           setAssistant(message);
           speakWithLanguage(message);
@@ -177,20 +191,31 @@ export function useVerification(
           });
           await refreshSession(sessionId);
         } else {
-          const message = "Document verification could not be completed. Please re-upload clearer supporting documents.";
+          const reasons = data.result.mismatchReasons?.length
+            ? data.result.mismatchReasons.join(" ")
+            : data.result.report;
+          const message = `Document mismatch detected. ${reasons} Please upload a document for the registered seller.`;
+          setDocumentError(message);
           setAssistant(message);
           speakWithLanguage(message);
         }
       } else {
+        setDocumentError("Failed to verify documents dynamically.");
         alert("Failed to verify documents dynamically.");
       }
     } catch (err) {
       console.warn("Document submission error:", err);
+      setDocumentError("Verification network error. Please try the upload again.");
       alert("Verification network error.");
     } finally {
       setIsVerifyingDocs(false);
     }
   }, [sessionId, setAssistant, speakWithLanguage, setStage, refreshSession, runProgressSteps]);
+
+  const updateSelectedDocuments = useCallback((files: File[]) => {
+    setDocumentError("");
+    setSelectedDocuments(files);
+  }, []);
 
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -220,9 +245,10 @@ export function useVerification(
     visionWarning,
     visionBlockers,
     isVerifyingDocs,
+    documentError,
     documentProgress,
     videoProgress,
-    selectedDocuments, setSelectedDocuments,
+    selectedDocuments, setSelectedDocuments: updateSelectedDocuments,
     sendVision,
     handleFileUpload,
   };

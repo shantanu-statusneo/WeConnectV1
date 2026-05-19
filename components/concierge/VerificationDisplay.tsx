@@ -18,6 +18,7 @@ type VerificationDisplayProps = {
   setSelectedDocuments: (v: File[]) => void;
   handleFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   isVerifyingDocs: boolean;
+  documentError: string;
   documentProgress: VerificationProgressStep[];
   videoProgress: VerificationProgressStep[];
   scanning: boolean;
@@ -76,6 +77,7 @@ export function VerificationDisplay({
   setSelectedDocuments,
   handleFileUpload,
   isVerifyingDocs,
+  documentError,
   documentProgress,
   videoProgress,
   scanning,
@@ -163,6 +165,19 @@ export function VerificationDisplay({
           </div>
           <p className="text-base font-semibold text-cyan-900">Upload Supporting Documents</p>
           <p className="mt-1 text-xs text-slate-500">Business registration, tax, ownership, or incorporation documents. PDF/DOCX, max 3 files.</p>
+
+          {documentError && (
+            <div
+              role="alert"
+              className="mt-5 flex w-full max-w-md items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-left text-xs font-medium text-rose-800 shadow-sm"
+            >
+              <XCircle size={16} className="mt-0.5 shrink-0 text-rose-600" />
+              <div>
+                <p className="font-bold">Document mismatch error</p>
+                <p className="mt-1 leading-relaxed">{documentError}</p>
+              </div>
+            </div>
+          )}
           
           {!!selectedDocuments.length && (
             <div className="mt-6 w-full max-w-md divide-y divide-cyan-100 rounded-lg border border-cyan-100 bg-white p-2 shadow-sm">

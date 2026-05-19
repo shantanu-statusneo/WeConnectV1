@@ -29,22 +29,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Maximum 3 documents allowed" }, { status: 400 });
     }
 
-    const registration = getSession(sessionId)?.registration;
+    const session = getSession(sessionId);
+    const registration = session?.registration;
     if (!registration) {
       return NextResponse.json({ error: "Registration session not found" }, { status: 404 });
     }
 
     appendTerminal(sessionId, `[DOC_UPLOAD] Starting AI extraction/verification for ${documents.length} files...`);
 
-    const result = await runDocumentVerification(
-      registration.business_name,
-      registration.country,
-      documents
-    );
+    const result = await runDocumentVerification(registration, documents, session?.companySnapshot);
 
     appendTerminal(
       sessionId,
-      `[DOC_VERIFY] verified=${result.verified} confidence=${result.confidence}% report="${result.report}"`
+      `[DOC_VERIFY] verified=${result.verified} confidence=${result.confidence}% signals="${result.matchedSignals?.join(", ") ?? "none"}" report="${result.report}"`
     );
     upsertSessionAiDocumentAssessment(sessionId, {
       submittedCount: documents.length,

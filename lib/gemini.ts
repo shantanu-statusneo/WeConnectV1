@@ -7,6 +7,12 @@ import {
 } from "./prompts/wec-guardian";
 import type { RegistryCompany } from "./types";
 import type { SessionStage } from "./types";
+import type { RegistrationDraft } from "./registration";
+import {
+  triangulateDocuments,
+  type DocumentTriangulationResult,
+  type UploadedDocument,
+} from "./document-triangulation";
 
 const DEFAULT_MODEL = "gemini-2.5-flash";
 const DEFAULT_GEMINI_CALL_TIMEOUT_MS = 12_000;
@@ -66,6 +72,9 @@ export type DocumentVerificationResult = {
   confidence: number;
   report: string;
   quotaFallback: boolean;
+  mismatchReasons?: string[];
+  matchedSignals?: string[];
+  extracted?: DocumentTriangulationResult["extracted"];
 };
 
 export type AttestationResult = {
@@ -539,32 +548,40 @@ export async function runVision(
   }
 }
 
-function mockDocumentVerification(companyName: string): DocumentVerificationResult {
-  return {
-    verified: true,
-    confidence: 85,
-    report: `Fallback demo: Automatically verified document contents for ${companyName}.`,
-    quotaFallback: false,
-  };
-}
-
 export async function runDocumentVerification(
-  companyName: string,
-  country: string,
-  documents: Array<{ base64: string; mimeType: string }>,
+  registration: RegistrationDraft,
+  documents: UploadedDocument[],
+  companySnapshot?: RegistryCompany,
 ): Promise<DocumentVerificationResult> {
+  const triangulation = triangulateDocuments(registration, documents, companySnapshot);
   const prompt = `Please review the attached business registration documents.
-Does the documentation explicitly support the existence of a business named roughly "${companyName}" incorporated or operating in "${country}"? 
+Triangulate the uploaded document against the seller registration and registry evidence.
+
+Seller application:
+- Business name: ${registration.business_name}
+- Country: ${registration.country}
+- Owners: ${registration.owner_details.map((owner) => `${owner.fullName} (${owner.ownershipPct}%)`).join(", ") || "not provided"}
+
+Registry evidence:
+- Legal name: ${companySnapshot?.companyName ?? registration.business_name}
+- Jurisdiction: ${companySnapshot?.jurisdiction ?? registration.country}
+- Registry snippet: ${companySnapshot?.registrySnippet ?? "not available"}
+- Primary owner: ${companySnapshot?.primaryOwner ?? "not available"}
+- Directors: ${companySnapshot?.directors.join(", ") ?? "not available"}
+
+Confirm only when the document supports the same entity, jurisdiction or registry number, and owner/director evidence. Reject wrong-company documents with clear mismatch reasons.
 
 Return JSON only:
 {
   "verified": boolean,
   "confidence": number (0-100),
-  "report": string (a short one sentence summary of what was found)
+  "report": string (a short one sentence summary of what was found),
+  "mismatchReasons": string[],
+  "matchedSignals": string[]
 }`;
 
   if (!hasGeminiKey()) {
-    return { ...mockDocumentVerification(companyName), quotaFallback: false };
+    return { ...triangulation, quotaFallback: false };
   }
 
   const parts: any[] = [{ text: prompt }];
@@ -579,11 +596,36 @@ Return JSON only:
     const text = run.text;
     try {
       const cleaned = text.replace(/```json\n?|\n?```/g, "").trim();
-      const data = JSON.parse(cleaned) as { verified: boolean; confidence: number; report: string };
+      const data = JSON.parse(cleaned) as {
+        verified: boolean;
+        confidence: number;
+        report: string;
+        mismatchReasons?: string[];
+        matchedSignals?: string[];
+      };
+      const modelVerified = Boolean(data.verified);
+      const verified = triangulation.verified && modelVerified;
+      const mismatchReasons = uniqueDocumentStrings([
+        ...(triangulation.mismatchReasons ?? []),
+        ...(!modelVerified ? data.mismatchReasons ?? [] : []),
+      ]);
+      const matchedSignals = uniqueDocumentStrings([
+        ...(triangulation.matchedSignals ?? []),
+        ...(data.matchedSignals ?? []),
+      ]);
       return { 
-        verified: Boolean(data.verified), 
-        confidence: Number(data.confidence) || 0,
-        report: String(data.report || ""),
+        verified,
+        confidence: verified
+          ? Math.min(Number(data.confidence) || 0, triangulation.confidence)
+          : Math.max(0, Math.min(Number(data.confidence) || 0, triangulation.confidence)),
+        report: verified
+          ? String(data.report || triangulation.report)
+          : mismatchReasons.length
+            ? `Document mismatch: ${mismatchReasons.join(" ")}`
+            : String(data.report || triangulation.report),
+        mismatchReasons,
+        matchedSignals,
+        extracted: triangulation.extracted,
         quotaFallback: false 
       };
     } catch {
@@ -591,16 +633,23 @@ Return JSON only:
         verified: false,
         confidence: 0,
         report: "Parse error from document verification model.",
+        mismatchReasons: ["The document verification model returned an unreadable response."],
+        matchedSignals: triangulation.matchedSignals,
+        extracted: triangulation.extracted,
         quotaFallback: false,
       };
     }
   } catch (error) {
     return {
-      ...mockDocumentVerification(companyName),
+      ...triangulation,
       quotaFallback: true,
-      report: "Quota fallback triggered. " + mockDocumentVerification(companyName).report,
+      report: "Quota fallback triggered. " + triangulation.report,
     };
   }
+}
+
+function uniqueDocumentStrings(values: string[]) {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
 }
 
 

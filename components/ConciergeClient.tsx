@@ -376,6 +376,7 @@ export function ConciergeClient({ embed, language = "en" }: { embed?: boolean; l
           setSelectedDocuments={verification.setSelectedDocuments}
           handleFileUpload={verification.handleFileUpload}
           isVerifyingDocs={verification.isVerifyingDocs}
+          documentError={verification.documentError}
           documentProgress={verification.documentProgress}
           videoProgress={verification.videoProgress}
           scanning={verification.scanning}

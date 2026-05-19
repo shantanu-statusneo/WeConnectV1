@@ -7,7 +7,7 @@
     "jurisdiction": "UK — Companies House",
     "registrySnippet": "Company #08472931 · Incorporated 2013 · Active",
     "primaryOwner": "Maria Silva",
-    "ownershipFemalePct": 60,
+    "ownershipFemalePct": 100,
     "directors": ["Maria Silva", "James Okonkwo"],
     "riskFlags": []
   },
@@ -19,7 +19,7 @@
     "jurisdiction": "Brazil — Junta Comercial",
     "registrySnippet": "CNPJ 12.345.678/0001-90 · Microempresa",
     "primaryOwner": "Ana Costa",
-    "ownershipFemalePct": 72,
+    "ownershipFemalePct": 100,
     "directors": ["Ana Costa", "Paulo Mendes"],
     "riskFlags": ["recent_director_change"]
   },
