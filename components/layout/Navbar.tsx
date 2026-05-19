@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Network, BookOpen, ShoppingBag, LayoutDashboard, Menu, X, LogIn, LogOut, ShieldCheck, UserRound } from "lucide-react";
+import { Network, BookOpen, ShoppingBag, LayoutDashboard, Menu, X, LogIn, LogOut, ShieldCheck, UserRound, ClipboardList } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { type Language } from "@/lib/i18n";
@@ -16,13 +16,14 @@ export default function Navbar({ language = "en" }: { language?: Language }) {
   const baseLinks = [
     { href: `/${language}/dashboard`,    label: "Seller Registration",    icon: LayoutDashboard },
     { href: `/${language}/profile`,      label: "Profile",                icon: UserRound },
+    { href: `/seller-portal`, label: "Seller RFPs", icon: ClipboardList },
     { href: `/buyer-portal`, label: "Buyer Portal", icon: ShoppingBag },
     { href: `/ecosystem`,    label: "Ecosystem",    icon: Network },
     { href: `/documentation`,label: "Docs",         icon: BookOpen },
   ];
   const links = baseLinks.filter((link) => {
     if (session?.role === "buyer") return link.href === "/buyer-portal";
-    if (session?.role === "seller") return link.href === `/${language}/dashboard` || link.href === `/${language}/profile` || link.href === "/ecosystem";
+    if (session?.role === "seller") return link.href === `/${language}/dashboard` || link.href === `/${language}/profile` || link.href === "/seller-portal" || link.href === "/ecosystem";
     return true;
   });
   const adminLinks = session?.role === "admin"

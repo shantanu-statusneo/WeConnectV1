@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   BadgeCheck,
   BriefcaseBusiness,
@@ -75,6 +75,17 @@ type ChatMessage = {
   author: "buyer" | "seller";
   body: string;
   timestamp: string;
+};
+
+type RfpRequest = {
+  id: string;
+  supplierId: string;
+  supplierName: string;
+  requirement: string;
+  status: "requested" | "viewed" | "responded" | "declined";
+  requestedAt: string;
+  updatedAt: string;
+  sellerResponse?: string;
 };
 
 type SocialAccount = {
@@ -225,6 +236,27 @@ function initialChatMessages(row: ResultRow): ChatMessage[] {
   ];
 }
 
+function formatShortDate(value: string) {
+  return new Date(value).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function rfpStatusClass(status: RfpRequest["status"]) {
+  switch (status) {
+    case "responded":
+      return "border-emerald-500/30 bg-emerald-500/10 text-emerald-100";
+    case "declined":
+      return "border-rose-500/30 bg-rose-500/10 text-rose-100";
+    case "viewed":
+      return "border-blue-500/30 bg-blue-500/10 text-blue-100";
+    default:
+      return "border-amber-500/30 bg-amber-500/10 text-amber-100";
+  }
+}
+
 export default function BuyerPortalPage() {
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [assistantMode, setAssistantMode] = useState<"ai" | "search">("ai");
@@ -238,9 +270,18 @@ export default function BuyerPortalPage() {
   const [chatOpen, setChatOpen] = useState(false);
   const [chatDraft, setChatDraft] = useState("");
   const [chatMessagesBySupplier, setChatMessagesBySupplier] = useState<Record<string, ChatMessage[]>>({});
+  const [rfpComposerOpen, setRfpComposerOpen] = useState(false);
+  const [rfpMessage, setRfpMessage] = useState("");
+  const [rfpRequests, setRfpRequests] = useState<RfpRequest[]>([]);
   const [requestedSupplierId] = useState(() =>
     typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("supplierId"),
   );
+
+  const loadRfps = useCallback(async () => {
+    const res = await fetch("/api/buyer/rfp");
+    const json = (await res.json()) as { rfps?: RfpRequest[] };
+    setRfpRequests(json.rfps ?? []);
+  }, []);
 
   const runAssistantSearch = (value = assistantDraft) => {
     const query = value.trim();
@@ -296,8 +337,18 @@ export default function BuyerPortalPage() {
     void load();
   }, [filters]);
 
+  useEffect(() => {
+    void loadRfps();
+  }, [loadRfps]);
+
   const selectedId = selected ?? requestedSupplierId;
   const supplier = useMemo(() => rows.find((s) => s.supplier.id === selectedId) ?? null, [rows, selectedId]);
+
+  useEffect(() => {
+    setRfpComposerOpen(false);
+    setRfpMessage("");
+  }, [selectedId]);
+
   const naicsLabelByCode = useMemo(
     () =>
       new Map(
@@ -367,6 +418,12 @@ export default function BuyerPortalPage() {
 
   const runInviteRfp = async () => {
     if (!supplier) return;
+    const message = rfpMessage.trim();
+    if (!message) {
+      setActionMessage("Type an RFP message before sending the request.");
+      return;
+    }
+
     setActionLoading("rfp");
     setActionMessage("");
     try {
@@ -376,7 +433,7 @@ export default function BuyerPortalPage() {
         body: JSON.stringify({
           supplierId: supplier.supplier.id,
           supplierName: supplier.supplier.business_name,
-          buyerQuery: filters.query,
+          buyerQuery: message,
         }),
       });
       const json = (await res.json()) as { ok?: boolean; inviteId?: string; message?: string };
@@ -385,6 +442,9 @@ export default function BuyerPortalPage() {
         return;
       }
       setActionMessage(`RFP invite sent successfully (${json.inviteId}).`);
+      setRfpComposerOpen(false);
+      setRfpMessage("");
+      await loadRfps();
     } catch {
       setActionMessage("Could not send RFP invite. Please retry.");
     } finally {
@@ -491,6 +551,58 @@ export default function BuyerPortalPage() {
         <div className="mb-4 rounded-lg border border-[color:var(--border)] bg-[color:var(--card-muted)] p-3 text-xs text-[color:var(--muted-strong)]">
           Ranking policy: <strong>Digital Certified</strong> comes first, followed by <strong>Self-Certified</strong> and <strong>Self-Declared</strong> suppliers. Trust score and match relevance refine the final order.
         </div>
+
+        <section className="enterprise-panel mb-5 overflow-hidden rounded-lg">
+          <div className="flex flex-col gap-2 border-b border-[color:var(--border)] p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="flex items-center gap-2 text-sm font-bold text-zinc-100">
+                <BriefcaseBusiness size={15} className="text-[color:var(--brand-teal)]" /> RFP requests
+              </p>
+              <p className="mt-1 text-xs text-zinc-500">Track requested RFPs, seller status, and latest response.</p>
+            </div>
+            <span className="text-xs font-semibold text-zinc-500">{rfpRequests.length} active request{rfpRequests.length === 1 ? "" : "s"}</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-left text-xs">
+              <thead className="bg-[color:var(--card-muted)] text-zinc-500">
+                <tr>
+                  <th className="px-4 py-3 font-bold">RFP</th>
+                  <th className="px-4 py-3 font-bold">Seller</th>
+                  <th className="px-4 py-3 font-bold">Requirement</th>
+                  <th className="px-4 py-3 font-bold">Status</th>
+                  <th className="px-4 py-3 font-bold">Seller response</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[color:var(--border)]">
+                {rfpRequests.map((rfp) => (
+                  <tr key={rfp.id} className="align-top">
+                    <td className="px-4 py-3">
+                      <p className="font-bold text-zinc-100">{rfp.id}</p>
+                      <p className="mt-1 text-zinc-500">{formatShortDate(rfp.requestedAt)}</p>
+                    </td>
+                    <td className="px-4 py-3 font-semibold text-zinc-200">{rfp.supplierName}</td>
+                    <td className="max-w-xs px-4 py-3 leading-5 text-zinc-400">{rfp.requirement}</td>
+                    <td className="px-4 py-3">
+                      <span className={cn("inline-flex rounded-full border px-2.5 py-1 font-bold capitalize", rfpStatusClass(rfp.status))}>
+                        {rfp.status}
+                      </span>
+                    </td>
+                    <td className="max-w-sm px-4 py-3 leading-5 text-zinc-400">
+                      {rfp.sellerResponse || "Awaiting seller response"}
+                    </td>
+                  </tr>
+                ))}
+                {rfpRequests.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-8 text-center text-zinc-500">
+                      No RFPs requested yet. Select a supplier and use Invite to RFP.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </section>
 
         {session.role === "seller" ? (
           <div className="mb-4 rounded-lg border border-[color:var(--border)] bg-[color:var(--card-muted)] p-4 text-sm text-[color:var(--muted-strong)]">
@@ -958,13 +1070,57 @@ export default function BuyerPortalPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => void runInviteRfp()}
+                    onClick={() => {
+                      setRfpComposerOpen(true);
+                      setActionMessage("");
+                    }}
                     disabled={actionLoading !== null}
                     className="inline-flex flex-1 items-center justify-center rounded-md border border-zinc-700 px-4 py-2 text-sm font-medium transition-colors hover:bg-zinc-800 hover:text-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {actionLoading === "rfp" ? "Sending..." : "Invite to RFP"}
+                    Invite to RFP
                   </button>
                 </div>
+                {rfpComposerOpen ? (
+                  <form
+                    className="rounded-lg border border-[color:var(--border)] bg-[color:var(--card-muted)] p-4"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void runInviteRfp();
+                    }}
+                  >
+                    <label className="mb-2 block text-sm font-bold text-zinc-100" htmlFor="rfp-message">
+                      RFP message
+                    </label>
+                    <textarea
+                      id="rfp-message"
+                      value={rfpMessage}
+                      onChange={(event) => setRfpMessage(event.target.value)}
+                      placeholder="Describe your requirement, timeline, scope, budget range, or documents needed."
+                      className="min-h-28 w-full resize-y rounded-md border border-[color:var(--border)] bg-[color:var(--card)] px-3 py-2 text-sm leading-6 text-zinc-100 placeholder:text-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--ring-soft)]"
+                    />
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                      <button
+                        type="submit"
+                        disabled={actionLoading !== null}
+                        className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-[color:var(--brand-teal)] px-4 py-2 text-sm font-bold text-white transition-colors hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <Send size={14} />
+                        {actionLoading === "rfp" ? "Sending..." : "Send RFP"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRfpComposerOpen(false);
+                          setRfpMessage("");
+                        }}
+                        disabled={actionLoading !== null}
+                        className="inline-flex flex-1 items-center justify-center rounded-md border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                ) : null}
                 <div className="flex flex-col sm:flex-row gap-2">
                 <button
                   type="button"
