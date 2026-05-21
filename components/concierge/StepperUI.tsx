@@ -14,6 +14,7 @@ type StepperUIProps = {
   selfVerificationComplete: boolean;
   visionIdPassed: boolean;
   setManualFlowStep: (v: number | null) => void;
+  onStartDigitalCertification: () => void;
   resetRegistration: () => void;
   confirmRegistration: () => void;
   stage: string;
@@ -29,6 +30,7 @@ export function StepperUI({
   selfVerificationComplete,
   visionIdPassed,
   setManualFlowStep,
+  onStartDigitalCertification,
   resetRegistration,
   confirmRegistration,
   stage,
@@ -49,7 +51,7 @@ export function StepperUI({
     },
     {
       title: flowSteps[1],
-      description: "Upload supporting documents, scan a valid ID on webcam, then issue the blockchain certificate.",
+      description: "Upload the required incorporation or business registration document.",
       Icon: ShieldCheck,
       done: selfVerificationComplete,
       accent: "emerald",
@@ -62,15 +64,17 @@ export function StepperUI({
     },
     {
       title: flowSteps[2],
-      description: "Paid 72-hour authenticity review. Rejected digital requests are refunded.",
+      description: "Upload regional and optional documents, complete webcam ID, then payment.",
       Icon: CreditCard,
       done: activeCertType === "digital" && Boolean(cert),
       accent: "blue",
-      actionLabel: cert ? "Open" : "After Certificate",
+      actionLabel: selfVerificationComplete ? "Open" : "After Self Verification",
       onAction: () => {
-        if (cert) setManualFlowStep(2);
+        if (!selfVerificationComplete) return;
+        if (activeCertType === "digital") setManualFlowStep(2);
+        else onStartDigitalCertification();
       },
-      disabled: !cert,
+      disabled: !selfVerificationComplete,
     },
   ] as const;
 

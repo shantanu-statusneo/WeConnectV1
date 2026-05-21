@@ -6,9 +6,7 @@ export function verificationReadiness(session: SessionRecord) {
   const workflow = getDomainState(session.id);
   const isDigital = workflow.certificationType === "digital";
   const requiresIdentity =
-    workflow.certificationType === "self" ||
     workflow.certificationType === "digital" ||
-    session.registration?.cert_type === "self" ||
     session.registration?.cert_type === "digital";
   const paid = session.paid ?? false;
   const reg = validateRegistration(session.registration ?? emptyRegistrationDraft(), isDigital ? paid : true);

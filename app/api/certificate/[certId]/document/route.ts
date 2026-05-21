@@ -56,6 +56,39 @@ function certificationLabel(value: string | undefined): string {
   return "Self Declared";
 }
 
+function drawBrandMark(
+  page: PDFPage,
+  {
+    x,
+    y,
+    size,
+    font,
+    colors,
+  }: {
+    x: number;
+    y: number;
+    size: number;
+    font: PDFFont;
+    colors: {
+      plum: ReturnType<typeof rgb>;
+      rose: ReturnType<typeof rgb>;
+      coral: ReturnType<typeof rgb>;
+      white: ReturnType<typeof rgb>;
+    };
+  },
+) {
+  page.drawRectangle({ x, y, width: size, height: size, color: colors.plum });
+  page.drawRectangle({ x: x + size * 0.34, y, width: size * 0.33, height: size, color: colors.rose });
+  page.drawRectangle({ x: x + size * 0.67, y, width: size * 0.33, height: size, color: colors.coral });
+  page.drawText("WE", {
+    x: x + size * 0.2,
+    y: y + size * 0.38,
+    size: size * 0.25,
+    font,
+    color: colors.white,
+  });
+}
+
 export async function GET(
   _req: Request,
   ctx: { params: Promise<{ certId: string }> },
@@ -83,33 +116,56 @@ export async function GET(
     const titleFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
     const bodyFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
-    const white = rgb(1, 1, 1);
-    const black = rgb(0.09, 0.09, 0.09);
-    const yellow = rgb(250 / 255, 196 / 255, 0);
-    const muted = rgb(0.28, 0.28, 0.28);
+    const colors = {
+      background: rgb(255 / 255, 250 / 255, 251 / 255),
+      surface: rgb(255 / 255, 246 / 255, 248 / 255),
+      surfaceStrong: rgb(248 / 255, 238 / 255, 242 / 255),
+      card: rgb(1, 1, 1),
+      foreground: rgb(33 / 255, 22 / 255, 32 / 255),
+      muted: rgb(107 / 255, 91 / 255, 103 / 255),
+      mutedStrong: rgb(74 / 255, 58 / 255, 70 / 255),
+      border: rgb(231 / 255, 208 / 255, 219 / 255),
+      borderStrong: rgb(196 / 255, 161 / 255, 180 / 255),
+      plum: rgb(138 / 255, 49 / 255, 95 / 255),
+      rose: rgb(201 / 255, 79 / 255, 124 / 255),
+      coral: rgb(227 / 255, 123 / 255, 107 / 255),
+      teal: rgb(8 / 255, 127 / 255, 140 / 255),
+      white: rgb(1, 1, 1),
+    };
 
     const left = 48;
     const contentWidth = 499;
     let y = 786;
 
-    page.drawRectangle({ x: 20, y: 20, width: 555, height: 802, color: white, borderColor: black, borderWidth: 2 });
-    page.drawRectangle({ x: 20, y: 748, width: 555, height: 74, color: black });
-    page.drawRectangle({ x: 20, y: 734, width: 555, height: 14, color: yellow });
+    page.drawRectangle({ x: 0, y: 0, width: 595, height: 842, color: colors.background });
+    page.drawRectangle({ x: 20, y: 20, width: 555, height: 802, color: colors.card, borderColor: colors.borderStrong, borderWidth: 1.5 });
+    page.drawRectangle({ x: 20, y: 748, width: 555, height: 74, color: colors.surface });
+    page.drawRectangle({ x: 20, y: 748, width: 185, height: 74, color: colors.plum });
+    page.drawRectangle({ x: 205, y: 748, width: 185, height: 74, color: colors.rose });
+    page.drawRectangle({ x: 390, y: 748, width: 185, height: 74, color: colors.coral });
+    page.drawRectangle({ x: 20, y: 734, width: 555, height: 14, color: colors.teal });
 
-    page.drawText("WEConnect Certificate", {
-      x: left,
-      y,
-      size: 28,
+    drawBrandMark(page, { x: left, y: 770, size: 32, font: titleFont, colors });
+    page.drawText("WEConnect", {
+      x: left + 44,
+      y: 789,
+      size: 16,
       font: titleFont,
-      color: yellow,
+      color: colors.white,
     });
-    y -= 34;
-    page.drawText("Digital Trust and Verification", {
-      x: left,
-      y,
-      size: 13,
+    page.drawText("Women-Owned Enterprise Network", {
+      x: left + 44,
+      y: 775,
+      size: 8.5,
+      font: bodyFont,
+      color: colors.white,
+    });
+    page.drawText("Certificate", {
+      x: 388,
+      y: 783,
+      size: 24,
       font: titleFont,
-      color: white,
+      color: colors.white,
     });
 
     y = 680;
@@ -118,7 +174,7 @@ export async function GET(
       y,
       size: 14,
       font: bodyFont,
-      color: muted,
+      color: colors.muted,
     });
     y -= 34;
 
@@ -127,14 +183,16 @@ export async function GET(
       y: y - 36,
       width: contentWidth - 16,
       height: 52,
-      color: yellow,
+      color: colors.surface,
+      borderColor: colors.border,
+      borderWidth: 1,
     });
     page.drawText(cert.companyName, {
       x: left,
       y: y - 10,
       size: 24,
       font: titleFont,
-      color: black,
+      color: colors.plum,
     });
     y -= 64;
 
@@ -144,11 +202,11 @@ export async function GET(
         ? "has a paid Digital Certification request under supplier-admin review."
         : "has successfully completed the WEConnect verification process.",
       {
-      x: left,
-      y,
-      size: 12,
-      font: bodyFont,
-      color: muted,
+        x: left,
+        y,
+        size: 12,
+        font: bodyFont,
+        color: colors.muted,
       },
     );
     y -= 30;
@@ -171,14 +229,14 @@ export async function GET(
         y,
         size: 10.5,
         font: titleFont,
-        color: black,
+        color: colors.foreground,
       });
       page.drawText(value, {
         x: left + 140,
         y,
         size: 10.5,
         font: bodyFont,
-        color: muted,
+        color: colors.mutedStrong,
       });
       y -= 18;
     }
@@ -189,8 +247,8 @@ export async function GET(
       y: y - 62,
       width: contentWidth - 16,
       height: 62,
-      color: rgb(0.98, 0.98, 0.98),
-      borderColor: rgb(0.8, 0.8, 0.8),
+      color: colors.surfaceStrong,
+      borderColor: colors.border,
       borderWidth: 1,
     });
     y = drawWrappedText(page, isProvisional ? `Review Reference: ${cert.txHash}` : `Blockchain Anchor TX: ${cert.txHash}`, {
@@ -199,18 +257,18 @@ export async function GET(
       maxWidth: contentWidth - 36,
       fontSize: 10,
       lineHeight: 13,
-      color: muted,
+      color: colors.mutedStrong,
       font: bodyFont,
     });
 
-    
-    page.drawRectangle({ x: 20, y: 20, width: 555, height: 26, color: black });
+    page.drawRectangle({ x: 20, y: 20, width: 555, height: 26, color: colors.plum });
+    page.drawRectangle({ x: 390, y: 20, width: 185, height: 26, color: colors.rose });
     page.drawText("Issued by WEConnect Trust Engine", {
       x: left,
       y: 29,
       size: 10,
       font: titleFont,
-      color: yellow,
+      color: colors.white,
     });
 
     const bytes = await pdfDoc.save();

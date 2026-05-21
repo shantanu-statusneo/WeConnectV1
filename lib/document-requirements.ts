@@ -57,7 +57,7 @@ const AFRICA_REQUIREMENTS: DocumentRequirement[] = [
     id: "africa_business_registration_record",
     label: "Africa business registration record",
     description: "Country registry extract, company registration certificate, or local business license.",
-    requiredFor: ["self", "digital"],
+    requiredFor: ["digital"],
     countryGroup: "africa",
   },
   {
@@ -88,7 +88,7 @@ const US_REQUIREMENTS: DocumentRequirement[] = [
     id: "us_business_registration_record",
     label: "US business registration record",
     description: "Secretary of State record, articles of incorporation, LLC filing, or DBA record.",
-    requiredFor: ["self", "digital"],
+    requiredFor: ["digital"],
     countryGroup: "us",
   },
   {

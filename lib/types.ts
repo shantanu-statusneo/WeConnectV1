@@ -17,6 +17,7 @@ export type SessionStage =
   | "voice_confirm"
   | "doc_upload"
   | "vision_id"
+  | "self_verified"
   | "voice_attestation"
   | "anchoring"
   | "complete";

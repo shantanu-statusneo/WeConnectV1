@@ -393,7 +393,7 @@ export function RegistrationReview({
 
         <div className="mt-6 flex flex-col gap-3 border-t border-cyan-100/50 pt-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-slate-500">
-            Registration must be complete before document upload and webcam ID verification can start.
+            Registration must be complete before self verification document upload can start.
           </p>
           <button
             type="button"

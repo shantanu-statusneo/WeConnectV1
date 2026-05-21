@@ -37,8 +37,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "No documents provided" }, { status: 400 });
     }
 
-    if (documents.length > 3) {
-      return NextResponse.json({ error: "Maximum 3 documents allowed" }, { status: 400 });
+    if (documents.length > 10) {
+      return NextResponse.json({ error: "Maximum 10 documents allowed" }, { status: 400 });
     }
 
     const session = getSession(sessionId);

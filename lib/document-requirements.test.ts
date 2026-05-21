@@ -29,11 +29,26 @@ describe("document requirements", () => {
     expect(checklist.requirements.some((requirement) => requirement.id === "us_business_registration_record")).toBe(false);
   });
 
-  it("finds missing required documents for the active certification path", () => {
+  it("requires only the base registration document for self verification", () => {
     const checklist = getDocumentChecklist("South Africa", "self");
 
-    expect(getMissingRequiredDocumentIds(checklist, ["incorporation_business_registration"])).toEqual([
+    expect(getMissingRequiredDocumentIds(checklist, [])).toEqual(["incorporation_business_registration"]);
+    expect(getMissingRequiredDocumentIds(checklist, ["incorporation_business_registration"])).toEqual([]);
+  });
+
+  it("finds missing required regional documents for digital certification", () => {
+    const checklist = getDocumentChecklist("South Africa", "digital");
+
+    expect(getMissingRequiredDocumentIds(checklist, [
+      "incorporation_business_registration",
+      "ownership_proof",
+      "women_ownership_declaration",
+      "hr_role_document",
+    ])).toEqual([
       "africa_business_registration_record",
+      "africa_shareholder_ownership_document",
+      "africa_owner_identity_proof",
+      "africa_independence_declaration",
     ]);
   });
 

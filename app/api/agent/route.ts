@@ -27,6 +27,7 @@ const STAGES: SessionStage[] = [
   "voice_confirm",
   "doc_upload",
   "vision_id",
+  "self_verified",
   "voice_attestation",
   "anchoring",
   "complete",
@@ -123,8 +124,8 @@ function localTurnFallback(
     return affirmed
       ? {
           assistantText:
-            "Thank you. Please hold your government ID steady in front of the camera. I will scan it now.",
-          nextStage: "vision_id",
+            "Thank you. Self verification is complete. Digital Certification is highly recommended for stronger buyer trust.",
+          nextStage: "self_verified",
           manualReviewSuggested: false,
           controlAndManagementScore: 80,
         }
@@ -372,9 +373,10 @@ export async function POST(req: Request) {
       effectiveAssistantText =
         "Thank you. Please upload your business registration document. Once uploaded, say yes or confirm to proceed.";
     } else if (stage === "doc_upload" && affirmed) {
-      effectiveNextStage = "vision_id";
-      effectiveAssistantText =
-        "Thank you. Please hold your government ID steady in front of the camera. I will scan it now.";
+      effectiveNextStage = isDigitalPath ? "vision_id" : "self_verified";
+      effectiveAssistantText = isDigitalPath
+        ? "Thank you. Please hold your government ID steady in front of the camera. I will scan it now."
+        : "Thank you. Self verification is complete. Digital Certification is highly recommended for stronger buyer trust.";
     }
     if (shouldBlockAnchoringTransition(effectiveNextStage, validation.missingRequired)) {
       effectiveNextStage = "voice_attestation";

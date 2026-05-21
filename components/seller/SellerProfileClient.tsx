@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  ArrowRight,
   BadgeCheck,
   Building2,
   CalendarClock,
@@ -15,8 +16,11 @@ import {
   Hourglass,
   RefreshCcw,
   Save,
+  Search,
   ShieldCheck,
+  Sparkles,
   Trash2,
+  Users,
   X,
 } from "lucide-react";
 import { readSellerSessionId, SELLER_SESSION_ID_KEY, useAuthSession, writeSellerSessionId } from "@/components/auth/session";
@@ -141,7 +145,7 @@ function statusMeta(status: SellerProfileStatus) {
     case "self_verified":
       return {
         label: "Self verified",
-        description: "Documents and webcam ID are complete. Digital Certification is the next step.",
+        description: "Business registration document is verified. Digital Certification is the recommended next step.",
         className: "border-emerald-200 bg-emerald-50 text-emerald-800",
         Icon: ShieldCheck,
       };
@@ -646,6 +650,10 @@ export function SellerProfileClient({ language = "en" }: { language?: Language }
   const isDigitalCertified = profile.status === "digital_certified";
   const isDigitalPending = profile.status === "digital_pending";
   const hasProvisionalCertificate = profile.certificate?.provenanceSummary?.certificateKind === "provisional";
+  const showDigitalIdentityStatus =
+    isDigitalPending ||
+    isDigitalCertified ||
+    Boolean(profile.verification?.identityVerified);
 
   return (
     <div className="grid gap-5">
@@ -751,13 +759,15 @@ export function SellerProfileClient({ language = "en" }: { language?: Language }
                 {profile.verification?.documentVerified ? "Verified" : "Pending"}
               </span>
             </p>
-            <p className="flex items-center justify-between rounded-lg border border-[color:var(--border)] bg-[color:var(--card-muted)] px-3 py-2 text-sm">
-              <span className="text-[color:var(--muted)]">Webcam ID</span>
-              <span className="inline-flex items-center gap-1 font-semibold text-[color:var(--foreground)]">
-                {profile.verification?.identityVerified ? <CheckCircle2 size={14} className="text-emerald-600" /> : null}
-                {profile.verification?.identityVerified ? "Verified" : "Pending"}
-              </span>
-            </p>
+            {showDigitalIdentityStatus ? (
+              <p className="flex items-center justify-between rounded-lg border border-[color:var(--border)] bg-[color:var(--card-muted)] px-3 py-2 text-sm">
+                <span className="text-[color:var(--muted)]">Digital webcam ID</span>
+                <span className="inline-flex items-center gap-1 font-semibold text-[color:var(--foreground)]">
+                  {profile.verification?.identityVerified ? <CheckCircle2 size={14} className="text-emerald-600" /> : null}
+                  {profile.verification?.identityVerified ? "Verified" : "Pending"}
+                </span>
+              </p>
+            ) : null}
             <p className="flex items-center justify-between rounded-lg border border-[color:var(--border)] bg-[color:var(--card-muted)] px-3 py-2 text-sm">
               <span className="text-[color:var(--muted)]">Trust score</span>
               <span className="font-semibold text-[color:var(--foreground)]">{profile.verification?.trustScore ?? "Pending"}</span>
@@ -799,15 +809,37 @@ export function SellerProfileClient({ language = "en" }: { language?: Language }
       </section>
 
       {isSelfVerified || isDigitalPending ? (
-        <section className="rounded-lg border border-blue-100 bg-blue-50/80 p-5 shadow-sm">
-          <h2 className="flex items-center gap-2 text-base font-bold text-blue-900">
-            <ShieldCheck size={17} /> Paid Digital Certification
+        <section className="rounded-lg border-2 border-blue-500 bg-blue-50 p-5 shadow-lg shadow-blue-100">
+          <p className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white">
+            <Sparkles size={13} /> Upgrade for buyer reach
+          </p>
+          <h2 className="mt-3 flex items-center gap-2 text-2xl font-black tracking-tight text-blue-950">
+            <ShieldCheck size={22} /> Digital Certification helps buyers choose you
           </h2>
           <p className="mt-2 text-sm leading-6 text-blue-800">
             {isDigitalPending
               ? "Your paid digital certification request is under supplier-admin review. A blockchain-backed certificate is issued only after approval; rejected requests are refunded."
-              : "Recommended next step: submit a paid digital certification request for a 72-hour authenticity review."}
+              : "Self verification is a start. Digital Certification adds region-specific document checks, webcam ID verification, and supplier-admin review so your profile looks safer and more procurement-ready."}
           </p>
+          {!isDigitalPending ? (
+            <div className="mt-4 grid gap-3 text-left md:grid-cols-3">
+              <div className="rounded-lg bg-white p-3 shadow-sm">
+                <Search size={17} className="text-blue-700" />
+                <p className="mt-2 text-xs font-black uppercase tracking-wider text-blue-950">Buyer discovery</p>
+                <p className="mt-1 text-xs leading-5 text-blue-700">Example: stand out when buyers filter for highly trusted suppliers.</p>
+              </div>
+              <div className="rounded-lg bg-white p-3 shadow-sm">
+                <Users size={17} className="text-blue-700" />
+                <p className="mt-2 text-xs font-black uppercase tracking-wider text-blue-950">RFP outreach</p>
+                <p className="mt-1 text-xs leading-5 text-blue-700">Example: give procurement teams more confidence to invite you.</p>
+              </div>
+              <div className="rounded-lg bg-white p-3 shadow-sm">
+                <BadgeCheck size={17} className="text-blue-700" />
+                <p className="mt-2 text-xs font-black uppercase tracking-wider text-blue-950">Trust badge</p>
+                <p className="mt-1 text-xs leading-5 text-blue-700">Example: show stronger authenticity proof than self-upload alone.</p>
+              </div>
+            </div>
+          ) : null}
           {isDigitalPending && profile.review?.additionalInfoRequests?.length ? (
             <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900">
               <p className="font-bold">Supplier admin requested more information</p>
@@ -829,9 +861,9 @@ export function SellerProfileClient({ language = "en" }: { language?: Language }
                 type="button"
                 onClick={submitDigitalRequest}
                 disabled={!cardValid || submitting || !email.trim() || !phone.trim()}
-                className="btn-blue inline-flex justify-center gap-2 px-4 py-2 text-sm disabled:opacity-45 lg:col-span-2"
+                className="btn-blue inline-flex justify-center gap-2 px-4 py-2 text-sm font-black uppercase tracking-wider disabled:opacity-45 lg:col-span-2"
               >
-                <CreditCard size={15} /> Pay ${profile.payment?.amountUsd ?? 100} and submit
+                <CreditCard size={15} /> Pay ${profile.payment?.amountUsd ?? 100} and unlock buyer trust <ArrowRight size={15} />
               </button>
             </div>
           ) : null}

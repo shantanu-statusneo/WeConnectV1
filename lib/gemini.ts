@@ -443,8 +443,18 @@ function mockAgentTurn(
   if (stage === "voice_confirm" && /yes|yeah|correct|that's me|i am|sure/i.test(last)) {
     return {
       assistantText:
-        "Thank you. Please hold your government ID steady in front of the camera. I will scan it now.",
-      nextStage: "vision_id" as SessionStage | null,
+        "Thank you. Please upload your business registration document to complete self verification.",
+      nextStage: "doc_upload" as SessionStage | null,
+      manualReviewSuggested: false,
+      controlAndManagementScore: 80,
+    };
+  }
+
+  if (stage === "doc_upload" && /yes|yeah|uploaded|done|complete|correct|sure/i.test(last)) {
+    return {
+      assistantText:
+        "Self verification is complete. Digital Certification is highly recommended for stronger buyer trust.",
+      nextStage: "self_verified" as SessionStage | null,
       manualReviewSuggested: false,
       controlAndManagementScore: 80,
     };

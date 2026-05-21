@@ -59,7 +59,7 @@ export function ConciergeClient({ embed, language = "en" }: { embed?: boolean; l
   const [paid, setPaid] = useState(false);
   const [visionChecks, setVisionChecks] = useState<{ idPassed?: boolean }>({});
   const [workflow, setWorkflow] = useState<WorkflowState | null>(null);
-  const [, setAiAssessmentReport] = useState<AiAssessmentReport | null>(null);
+  const [aiAssessmentReport, setAiAssessmentReport] = useState<AiAssessmentReport | null>(null);
   const [, setCompliance] = useState<ComplianceResult | null>(null);
   const [, setTrustReport] = useState<TrustReport | null>(null);
   const [, setQuestionnaireAnswers] = useState<Record<string, string>>({
@@ -154,7 +154,7 @@ export function ConciergeClient({ embed, language = "en" }: { embed?: boolean; l
     : registrationCertType;
   const isDigitalPath = activeCertType === "digital";
   const isSelfPath = activeCertType === "self";
-  const requiresIdentityCheck = isSelfPath || isDigitalPath;
+  const requiresIdentityCheck = isDigitalPath;
   
   const registrationCheck = validateRegistration(registration, true);
   const readinessBlockers = [
@@ -168,6 +168,13 @@ export function ConciergeClient({ embed, language = "en" }: { embed?: boolean; l
     () => getDocumentChecklist(registration.country, activeCertType === "none" ? "registration" : activeCertType),
     [registration.country, activeCertType],
   );
+  const digitalDocumentsVerified =
+    aiAssessmentReport?.documents?.verified &&
+    aiAssessmentReport.documents.certificationPath === "digital";
+  const digitalVerificationComplete =
+    isDigitalPath &&
+    Boolean(digitalDocumentsVerified) &&
+    (Boolean(visionChecks.idPassed) || stage === "voice_attestation");
 
   const mockCardValid = cardNumber.replace(/\s+/g, "").length >= 12 && cardExpiry.trim().length >= 4 && cardCvv.length >= 3;
 
@@ -276,6 +283,12 @@ export function ConciergeClient({ embed, language = "en" }: { embed?: boolean; l
   };
 
   const onUpgrade = async () => {
+    if (!digitalVerificationComplete) {
+      const msg = "Please complete Digital Certification document upload and webcam ID verification before payment.";
+      setAssistant(msg);
+      speakWithLanguage(msg);
+      return;
+    }
     if (!registration.email || !registration.phone || !mockCardValid) {
       alert("Please fill all fields and enter valid card details.");
       return;
@@ -295,6 +308,27 @@ export function ConciergeClient({ embed, language = "en" }: { embed?: boolean; l
     setStage("complete");
     setManualFlowStep(2);
     const msg = "Digital certification request submitted. We will verify your details and authenticity within 72 hours. If rejected, the payment hold will be refunded.";
+    setAssistant(msg);
+    speakWithLanguage(msg);
+  };
+
+  const startDigitalCertification = async () => {
+    const nextRegistration = { ...registration, cert_type: "digital" };
+    setRegistration(nextRegistration);
+    setPaid(false);
+    await saveRegistration(nextRegistration, false);
+    await setCertificationType("digital");
+    setVisionChecks((prev) => ({ ...prev, idPassed: false }));
+    setStage("doc_upload");
+    setManualFlowStep(2);
+    if (sessionId) {
+      await fetch("/api/session", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, stage: "doc_upload" }),
+      });
+    }
+    const msg = "Digital Certification started. Please upload the region-specific required documents and any optional supporting documents.";
     setAssistant(msg);
     speakWithLanguage(msg);
   };
@@ -332,9 +366,10 @@ export function ConciergeClient({ embed, language = "en" }: { embed?: boolean; l
           match={effectiveMatch}
           activeCertType={activeCertType}
           registrationComplete={Boolean(effectiveMatch) && currentFlowStep > 0}
-          selfVerificationComplete={Boolean(cert)}
+          selfVerificationComplete={Boolean(cert) || stage === "self_verified" || isDigitalPath}
           visionIdPassed={Boolean(visionChecks.idPassed)}
           setManualFlowStep={setManualFlowStep}
+          onStartDigitalCertification={startDigitalCertification}
           resetRegistration={resetRegistration}
           confirmRegistration={confirmRegistration}
           stage={stage}
@@ -368,8 +403,10 @@ export function ConciergeClient({ embed, language = "en" }: { embed?: boolean; l
         />
 
         <VerificationDisplay 
-          show={currentFlowStep === 1 && !cert && stage !== "anchoring"}
+          show={currentFlowStep === 1 && !cert && stage !== "self_verified" && stage !== "anchoring"}
           stage={stage}
+          stepNumber={2}
+          certificationMode="self"
           assistant={assistant}
           badge={badge}
           visionNote={verification.visionNote}
@@ -391,18 +428,43 @@ export function ConciergeClient({ embed, language = "en" }: { embed?: boolean; l
         />
 
         <CertificateDisplay 
-          show={currentFlowStep === 1 && (Boolean(cert) || stage === "voice_attestation" || stage === "anchoring")}
+          show={currentFlowStep === 1 && (Boolean(cert) || stage === "self_verified" || stage === "anchoring")}
           cert={cert}
           verifyUrl={typeof window !== "undefined" && cert ? `${window.location.origin}/verify/${cert.id}` : ""}
           downloadCertificatePdf={reports.downloadCertificatePdf}
           downloadingCertificate={reports.downloadingCertificate}
-          setManualFlowStep={setManualFlowStep}
+          onStartDigitalCertification={startDigitalCertification}
           readinessForIssue={readinessForIssue}
           mergedBlockers={mergedBlockers}
           anchoring={anchoring}
           anchorCert={anchorCert}
           setAssistant={setAssistant}
           speakWithLanguage={speakWithLanguage}
+        />
+
+        <VerificationDisplay 
+          show={currentFlowStep === 2 && !paid && (stage === "doc_upload" || stage === "vision_id" || stage === "voice_attestation")}
+          stage={stage}
+          stepNumber={3}
+          certificationMode="digital"
+          assistant={assistant}
+          badge={badge}
+          visionNote={verification.visionNote}
+          visionWarning={verification.visionWarning}
+          visionBlockers={verification.visionBlockers}
+          sessionId={sessionId}
+          match={effectiveMatch}
+          onVoice={onVoice}
+          documentChecklist={documentChecklist}
+          selectedDocuments={verification.selectedDocuments}
+          setSelectedDocuments={verification.setSelectedDocuments}
+          handleFileUpload={verification.handleFileUpload}
+          isVerifyingDocs={verification.isVerifyingDocs}
+          documentError={verification.documentError}
+          documentProgress={verification.documentProgress}
+          videoProgress={verification.videoProgress}
+          scanning={verification.scanning}
+          sendVision={verification.sendVision}
         />
 
         <UpgradePortal 
@@ -418,6 +480,7 @@ export function ConciergeClient({ embed, language = "en" }: { embed?: boolean; l
           cardCvv={cardCvv}
           setCardCvv={setCardCvv}
           mockCardValid={mockCardValid}
+          digitalVerificationComplete={digitalVerificationComplete}
           paid={paid}
           onUpgrade={onUpgrade}
         />

@@ -34,7 +34,7 @@ function hasRegisteredEnterprise(registration?: RegistrationDraft) {
 }
 
 function resolveStatus(
-  session: { stage: string; aiAssessmentReport?: { documents?: { verified: boolean } }; visionChecks?: { idPassed?: boolean } },
+  session: { stage: string; aiAssessmentReport?: { documents?: { verified: boolean; certificationPath?: string } }; visionChecks?: { idPassed?: boolean } },
   registration: RegistrationDraft | undefined,
   workflow: DomainState,
   certificate: CertificateRecord | null,
@@ -46,7 +46,8 @@ function resolveStatus(
     }
     const selfVerificationComplete =
       Boolean(session.aiAssessmentReport?.documents?.verified) &&
-      (Boolean(session.visionChecks?.idPassed) || session.stage === "voice_attestation");
+      session.aiAssessmentReport?.documents?.certificationPath !== "digital" &&
+      session.stage === "self_verified";
     if (selfVerificationComplete) return "self_verified";
     return "registered";
   }

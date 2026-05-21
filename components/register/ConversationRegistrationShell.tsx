@@ -82,10 +82,14 @@ async function playPrompt(text: string, abortSignal?: AbortSignal) {
     if (abortSignal?.aborted) return;
     window.speechSynthesis.cancel();
     const voices = window.speechSynthesis.getVoices();
-    const clearVoicePattern = /google us english|microsoft (aria|jenny|guy|david|zira)|samantha|alex|daniel|karen/i;
+    const femaleVoicePattern =
+      /female|woman|microsoft (aria|jenny|zira)|samantha|victoria|karen|moira|tessa|fiona|veena|sangeeta|lekha|raveena|serena|susan|hazel|catherine|google us english female/i;
+    const maleVoicePattern = /microsoft (guy|david|mark)|alex|daniel|fred|george|rishi|male|man/i;
     const usableVoices = voices.filter((voice) => !/compact|novelty|whisper|trinoids|zarvox/i.test(voice.name));
+    const femaleVoices = usableVoices.filter((candidate) => femaleVoicePattern.test(candidate.name) && !maleVoicePattern.test(candidate.name));
     const voice =
-      usableVoices.find((candidate) => clearVoicePattern.test(candidate.name) && /^en[-_]/i.test(candidate.lang)) ??
+      femaleVoices.find((candidate) => candidate.lang === "en-IN") ??
+      femaleVoices.find((candidate) => /^en[-_]/i.test(candidate.lang)) ??
       usableVoices.find((candidate) => /en-US|en_US/i.test(candidate.lang)) ??
       usableVoices.find((candidate) => /^en[-_]/i.test(candidate.lang)) ??
       voices[0] ??
@@ -101,7 +105,7 @@ async function playPrompt(text: string, abortSignal?: AbortSignal) {
       const utterance = new SpeechSynthesisUtterance(safeText);
       utterance.lang = voice?.lang ?? "en-US";
       utterance.rate = 0.98;
-      utterance.pitch = 1.08;
+      utterance.pitch = 1.16;
       utterance.volume = 1;
       if (voice) utterance.voice = voice;
       utterance.onend = finish;

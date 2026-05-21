@@ -146,7 +146,7 @@ export function useVerification(
       }
       const prompt = isSelfPath
         ? "ID verification complete. Go for the digital certification to get a blockchain-anchored certificate and increase buyer trust and discovery."
-        : "ID verification complete. Please proceed to the next verification step.";
+        : "ID verification complete. Please enter payment details to submit your Digital Certification request.";
       setAssistant(prompt);
       speakWithLanguage(prompt);
     }
@@ -228,14 +228,21 @@ export function useVerification(
           const signalText = data.result.matchedSignals?.length
             ? ` Matched: ${data.result.matchedSignals.join(", ")}.`
             : "";
-          const message = `Documents verified.${signalText} Please show a valid ID in the webcam to complete self verification.`;
-          setStage("vision_id");
+          const nextStage = checklist.path === "digital" ? "vision_id" : "self_verified";
+          const message = checklist.path === "digital"
+            ? `Digital Certification documents verified.${signalText} Please show a valid ID in the webcam to continue.`
+            : `Self verification complete.${signalText} You uploaded the required Incorporation / business registration document. Digital Certification is highly recommended for stronger buyer trust.`;
+          setStage(nextStage);
           setAssistant(message);
           speakWithLanguage(message);
+          if (checklist.path === "self") {
+            await runCompliance();
+            await createTrustReport();
+          }
           await fetch("/api/session", {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ sessionId, stage: "vision_id" }),
+            body: JSON.stringify({ sessionId, stage: nextStage }),
           });
           await refreshSession(sessionId);
         } else {
@@ -258,7 +265,7 @@ export function useVerification(
     } finally {
       setIsVerifyingDocs(false);
     }
-  }, [sessionId, setAssistant, speakWithLanguage, setStage, refreshSession, runProgressSteps]);
+  }, [sessionId, setAssistant, speakWithLanguage, setStage, refreshSession, runProgressSteps, runCompliance, createTrustReport]);
 
   const updateSelectedDocuments = useCallback((files: SelectedDocument[]) => {
     setDocumentError("");

@@ -8,6 +8,8 @@ import { AlertTriangle, CheckCircle2, FileUp, ShieldCheck, UploadCloud, XCircle 
 type VerificationDisplayProps = {
   show: boolean;
   stage: string;
+  stepNumber?: 2 | 3;
+  certificationMode?: "self" | "digital";
   assistant: string;
   badge: string | null;
   visionNote: string;
@@ -93,6 +95,8 @@ function humanizeBlocker(blocker: string) {
 export function VerificationDisplay({
   show,
   stage,
+  stepNumber = 2,
+  certificationMode = "self",
   assistant,
   badge,
   visionNote,
@@ -113,11 +117,15 @@ export function VerificationDisplay({
   sendVision,
 }: VerificationDisplayProps) {
   if (!show) return null;
+  const isDigitalMode = certificationMode === "digital";
+  const visibleRequirements = isDigitalMode
+    ? documentChecklist.requirements
+    : documentChecklist.requirements.filter((requirement) => requirement.requiredFor.includes("self"));
   const missingRequiredIds = getMissingRequiredDocumentIds(
     documentChecklist,
     selectedDocuments.map((entry) => entry.requirementId),
   );
-  const requiredCount = documentChecklist.requirements.filter((requirement) =>
+  const requiredCount = visibleRequirements.filter((requirement) =>
     requirement.requiredFor.includes(documentChecklist.path),
   ).length;
   const uploadedRequiredCount = requiredCount - missingRequiredIds.length;
@@ -133,12 +141,14 @@ export function VerificationDisplay({
       <div className="flex items-center justify-between border-b border-slate-100 pb-4">
         <h2 className="text-lg sm:text-xl font-bold tracking-tight text-slate-900">
           {stage === "doc_upload"
-            ? "Step 2: Upload Supporting Documents"
+            ? `Step ${stepNumber}: Upload ${isDigitalMode ? "Digital Certification" : "Self Verification"} Documents`
             : stage === "vision_id"
-              ? "Step 2: Webcam ID Verification"
+              ? `Step ${stepNumber}: Webcam ID Verification`
               : stage === "voice_attestation"
-                ? "Step 2: Self Verification Complete"
-                : "Step 2: Self Verification"}
+                ? `Step ${stepNumber}: ${isDigitalMode ? "Digital Certification Verification Complete" : "Self Verification Complete"}`
+                : stage === "self_verified"
+                  ? "Step 2: Self Verification Complete"
+                  : `Step ${stepNumber}: ${isDigitalMode ? "Digital Certification" : "Self Verification"}`}
         </h2>
         <div className="flex items-center gap-2 rounded-lg bg-slate-100 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">
           <span className="h-2 w-2 animate-pulse rounded-full bg-cyan-500" />
@@ -177,7 +187,7 @@ export function VerificationDisplay({
         )}
       </div>
 
-      {stage !== "doc_upload" && stage !== "vision_id" && stage !== "voice_attestation" && (
+      {stage !== "doc_upload" && stage !== "vision_id" && stage !== "voice_attestation" && stage !== "self_verified" && (
         <div className="mt-5 sm:mt-6 flex flex-col sm:flex-row gap-3">
           <VoiceConcierge
             onTranscript={(t) => void onVoice(t)}
@@ -233,7 +243,7 @@ export function VerificationDisplay({
           )}
           
           <div className="mt-5 grid gap-3">
-            {documentChecklist.requirements.map((requirement) => {
+            {visibleRequirements.map((requirement) => {
               const uploaded = selectedDocuments.find((entry) => entry.requirementId === requirement.id);
               const required = requirement.requiredFor.includes(documentChecklist.path);
               return (
@@ -306,7 +316,9 @@ export function VerificationDisplay({
         <div className="mt-6">
           <div className="mb-4 rounded-lg border border-emerald-100 bg-emerald-50 p-3 text-sm text-emerald-800">
             <p className="flex items-center gap-2 font-semibold"><ShieldCheck size={16} /> Show a valid ID in the webcam</p>
-            <p className="mt-1 text-xs text-emerald-700">The scan checks liveness, clarity, and visible identity signals before certificate issuance.</p>
+            <p className="mt-1 text-xs text-emerald-700">
+              The scan checks liveness, clarity, and visible identity signals before {isDigitalMode ? "payment details are collected" : "certificate issuance"}.
+            </p>
           </div>
           <WebcamCapture
             scanning={scanning}
@@ -320,10 +332,9 @@ export function VerificationDisplay({
       {stage === "voice_attestation" && (
         <div className="mt-6 rounded-lg border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-800">
           <p className="flex items-center gap-2 font-bold">
-            <CheckCircle2 size={17} /> Documents and webcam ID are complete.
+            <CheckCircle2 size={17} /> {isDigitalMode ? "Digital documents and webcam ID are complete." : "Self verification is complete."}
           </p>
-          <p className="mt-1 text-xs text-emerald-700">Continue below to paid Digital Certification
-          </p>
+          <p className="mt-1 text-xs text-emerald-700">{isDigitalMode ? "Continue below to payment details." : "Continue below to paid Digital Certification"}</p>
         </div>
       )}
     </section>

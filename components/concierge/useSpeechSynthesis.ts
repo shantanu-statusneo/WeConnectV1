@@ -10,10 +10,15 @@ function selectVoice(langCode: string): SpeechSynthesisVoice | null {
   if (typeof window === "undefined" || !window.speechSynthesis) return null;
   const voices = window.speechSynthesis.getVoices();
   if (!voices.length) return null;
-  const clearVoicePattern = /google us english|microsoft (aria|jenny|guy|david|zira)|samantha|alex|daniel|karen/i;
+  const femaleVoicePattern =
+    /female|woman|microsoft (aria|jenny|zira)|samantha|victoria|karen|moira|tessa|fiona|veena|sangeeta|lekha|raveena|serena|susan|hazel|catherine|google us english female/i;
+  const maleVoicePattern = /microsoft (guy|david|mark)|alex|daniel|fred|george|rishi|male|man/i;
   const usableVoices = voices.filter((v) => !/compact|novelty|whisper|trinoids|zarvox/i.test(v.name));
+  const femaleVoices = usableVoices.filter((v) => femaleVoicePattern.test(v.name) && !maleVoicePattern.test(v.name));
   return (
-    usableVoices.find((v) => clearVoicePattern.test(v.name) && /^en[-_]/i.test(v.lang)) ??
+    femaleVoices.find((v) => v.lang === langCode) ??
+    femaleVoices.find((v) => v.lang.startsWith(langCode.split("-")[0])) ??
+    femaleVoices.find((v) => /^en[-_]/i.test(v.lang)) ??
     usableVoices.find((v) => /en-US|en_US/i.test(v.lang)) ??
     usableVoices.find((v) => /^en[-_]/i.test(v.lang)) ??
     usableVoices.find((v) => v.lang === langCode) ??
@@ -32,7 +37,7 @@ function flushSpeechQueue(langCode: string) {
   const utterance = new SpeechSynthesisUtterance(nextText);
   const voice = selectVoice(langCode);
   utterance.rate = 0.98;
-  utterance.pitch = 1.08;
+  utterance.pitch = 1.16;
   utterance.volume = 1;
   utterance.lang = voice?.lang ?? "en-US";
   if (voice) utterance.voice = voice;
