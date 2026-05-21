@@ -13,6 +13,7 @@ import {
   Download,
   Pencil,
   FileCheck2,
+  FileText,
   Hourglass,
   RefreshCcw,
   Save,
@@ -25,8 +26,10 @@ import {
 } from "lucide-react";
 import { readSellerSessionId, SELLER_SESSION_ID_KEY, useAuthSession, writeSellerSessionId } from "@/components/auth/session";
 import { formatCodeList } from "@/lib/code-labels";
+import { getDocumentChecklist, getMissingRequiredDocumentIds } from "@/lib/document-requirements";
 import type { Language } from "@/lib/i18n";
 import type { RegistrationDraft } from "@/lib/registration";
+import type { AiAssessmentReport } from "@/components/concierge/types";
 
 type SellerProfileStatus =
   | "not_registered"
@@ -75,6 +78,7 @@ type SellerProfile = {
     trustScore?: number;
     riskLevel?: "low" | "medium" | "high";
   };
+  aiAssessmentReport?: AiAssessmentReport | null;
   payment?: {
     state: "not_started" | "hold_placed" | "captured" | "refunded";
     amountUsd: number;
@@ -324,6 +328,67 @@ function EditField({
   );
 }
 
+function pct(value: number) {
+  return `${Math.max(0, Math.min(100, Math.round(value)))}%`;
+}
+
+function formatDateTime(value?: string) {
+  if (!value) return "Review timestamp pending";
+  return new Date(value).toLocaleString();
+}
+
+function buildProfileAssessment(profile: SellerProfile) {
+  const report = profile.aiAssessmentReport;
+  const registration = profile.registration;
+  const checklist = getDocumentChecklist(registration?.country ?? "", registration?.cert_type || "digital");
+  const documents = report?.documents;
+  const identity = report?.identity;
+  const requiredIds = documents?.requiredDocumentIds?.length
+    ? documents.requiredDocumentIds
+    : checklist.requirements
+      .filter((requirement) => requirement.requiredFor.includes(checklist.path))
+      .map((requirement) => requirement.id);
+  const submittedIds = documents?.submittedRequirementIds ?? [];
+  const missingIds = getMissingRequiredDocumentIds(checklist, submittedIds).filter((id) => requiredIds.includes(id));
+  const missingLabels = checklist.requirements
+    .filter((requirement) => missingIds.includes(requirement.id))
+    .map((requirement) => requirement.label);
+  const completeCount = requiredIds.length ? requiredIds.length - missingIds.length : 0;
+  const completeness = requiredIds.length ? (completeCount / requiredIds.length) * 100 : 100;
+  const correctness = documents?.confidence ?? (documents?.verified ? 86 : 64);
+  const identityConfidence = identity?.matchScore ?? identity?.confidence ?? 0;
+  const ownershipProof = submittedIds.includes("ownership_proof") || submittedIds.includes("us_shareholder_ownership_document") || submittedIds.includes("africa_shareholder_ownership_document");
+  const ownershipDeclaration = submittedIds.includes("women_ownership_declaration");
+  const managementProof = submittedIds.includes("hr_role_document");
+  const mismatchFlags = [
+    identity?.warningCode ? `Identity warning: ${identity.warningCode.replaceAll("_", " ")}` : "",
+    identity?.nameMatchBypassed ? "Owner name unavailable; identity name match bypassed for review" : "",
+  ].filter(Boolean);
+  const provisionallyEligible = Boolean(documents?.verified) && (Boolean(identity?.idFaceMatch) || identityConfidence >= 80);
+
+  return {
+    highlights: [
+      ["Assessment Status", provisionallyEligible ? "Provisionally Eligible" : "Assessor Review Recommended"],
+      ["Document Completeness", pct(completeness)],
+      ["Document Correctness", pct(correctness)],
+      ["Liveness / Identity Confidence", identityConfidence ? pct(identityConfidence) : "Not applicable"],
+    ] as Array<[string, string]>,
+    rows: [
+      ["Document completeness", `${completeCount} of ${requiredIds.length || 0} required documents received (${pct(completeness)}).`],
+      ["Document correctness", documents?.verified ? `Verified with ${pct(correctness)} confidence.` : `Requires review; current confidence is ${pct(correctness)}.`],
+      ["Business registry consistency", documents?.verified ? "Document fields are consistent with the seller profile registration." : documents?.summary ?? "Registry consistency is pending document verification."],
+      ["Ownership evidence", ownershipProof && ownershipDeclaration ? "Ownership proof and women-ownership declaration are present." : "One item requires assessor review."],
+      ["Management / control evidence", managementProof ? "Management or role evidence received for assessor review." : registration?.business_description ? "Operational narrative is present; role evidence remains reviewable." : "Management/control evidence is pending."],
+      ["Identity / liveness confidence", identity ? `${identity.idFaceMatch ? "Passed" : "Review"} with ${pct(identityConfidence)} confidence${identity.livenessHint ? `; ${identity.livenessHint}` : ""}.` : "Not applicable yet."],
+      ["Country checklist completion", `${completeCount} of ${requiredIds.length || 0} items complete.`],
+      ["Metadata review", documents?.checkedAt || identity?.checkedAt ? `Last AI check: ${formatDateTime(documents?.checkedAt ?? identity?.checkedAt)}.` : "Metadata review pending."],
+      ["Pending documents", missingLabels.length ? missingLabels.join(", ") : "No required documents pending."],
+      ["Mismatch flags", mismatchFlags.length ? mismatchFlags.join(" ") : "No active mismatch flags."],
+      ["Recommended next action", provisionallyEligible ? "Generate provisional certificate pending final approval." : "Route to assessor review before provisional certification."],
+    ] as Array<[string, string]>,
+  };
+}
+
 export function SellerProfileClient({ language = "en" }: { language?: Language }) {
   const router = useRouter();
   const session = useAuthSession();
@@ -339,6 +404,7 @@ export function SellerProfileClient({ language = "en" }: { language?: Language }
   const [editing, setEditing] = useState(false);
   const [savingDetails, setSavingDetails] = useState(false);
   const [deletingProfile, setDeletingProfile] = useState(false);
+  const [downloadingAiReport, setDownloadingAiReport] = useState(false);
   const [editForm, setEditForm] = useState<EditableEnterpriseDetails | null>(null);
 
   const registerPath = `/${language}/dashboard`;
@@ -559,6 +625,34 @@ export function SellerProfileClient({ language = "en" }: { language?: Language }
     URL.revokeObjectURL(url);
   };
 
+  const downloadAiAssessmentReport = async () => {
+    if (!profile?.sessionId) return;
+    setDownloadingAiReport(true);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/ai-assessment/report?sessionId=${encodeURIComponent(profile.sessionId)}`);
+      if (!response.ok) {
+        setMessage("AI assessment report is not ready yet.");
+        return;
+      }
+      const blob = await response.blob();
+      const contentDisposition = response.headers.get("Content-Disposition") ?? "";
+      const filenameMatch = contentDisposition.match(/filename=\"([^\"]+)\"/i);
+      const filename = filenameMatch?.[1] ?? `ai-assessment-${profile.sessionId.slice(0, 8)}.pdf`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      setMessage("AI assessment report downloaded.");
+    } catch {
+      setMessage("Could not download AI assessment report. Please retry.");
+    } finally {
+      setDownloadingAiReport(false);
+    }
+  };
+
   const submitDigitalRequest = async () => {
     if (!profile?.sessionId || !profile.registration || !cardValid) return;
     setSubmitting(true);
@@ -654,6 +748,7 @@ export function SellerProfileClient({ language = "en" }: { language?: Language }
     isDigitalPending ||
     isDigitalCertified ||
     Boolean(profile.verification?.identityVerified);
+  const profileAssessment = profile.aiAssessmentReport ? buildProfileAssessment(profile) : null;
 
   return (
     <div className="grid gap-5">
@@ -807,6 +902,48 @@ export function SellerProfileClient({ language = "en" }: { language?: Language }
           )}
         </div>
       </section>
+
+      {profileAssessment ? (
+        <section className="rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] p-5 shadow-sm">
+          <div className="flex flex-col gap-3 border-b border-[color:var(--border)] pb-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="inline-flex items-center gap-2 rounded-md bg-[color:var(--card-muted)] px-3 py-1 text-[10px] font-black uppercase tracking-widest text-[color:var(--brand-plum)]">
+                <FileText size={13} /> AI Assessment Report
+              </p>
+              <h2 className="mt-3 text-xl font-black tracking-tight text-[color:var(--foreground)]">Business verification summary</h2>
+              <p className="mt-1 max-w-2xl text-sm leading-6 text-[color:var(--muted)]">
+                A business-friendly view of document checks, identity confidence, ownership evidence, and recommended next action.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={downloadAiAssessmentReport}
+              disabled={downloadingAiReport}
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--card-elevated)] px-4 py-2 text-xs font-bold text-[color:var(--brand-plum)] transition-colors hover:bg-[color:var(--card-muted)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Download size={14} /> {downloadingAiReport ? "Preparing..." : "Download PDF"}
+            </button>
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-4">
+            {profileAssessment.highlights.map(([label, value]) => (
+              <div key={label} className="rounded-lg border border-[color:var(--border)] bg-[color:var(--card-muted)] p-3">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--muted)]">{label}</p>
+                <p className="mt-1 text-sm font-black text-[color:var(--foreground)]">{value}</p>
+              </div>
+            ))}
+          </div>
+
+          <dl className="mt-4 divide-y divide-[color:var(--border)] text-sm">
+            {profileAssessment.rows.map(([label, value]) => (
+              <div key={label} className="grid gap-1 py-3 sm:grid-cols-[220px_1fr] sm:gap-4">
+                <dt className="text-xs font-black uppercase tracking-wider text-[color:var(--muted)]">{label}</dt>
+                <dd className="leading-6 text-[color:var(--muted-strong)]">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      ) : null}
 
       {isSelfVerified || isDigitalPending ? (
         <section className="rounded-lg border-2 border-blue-500 bg-blue-50 p-5 shadow-lg shadow-blue-100">

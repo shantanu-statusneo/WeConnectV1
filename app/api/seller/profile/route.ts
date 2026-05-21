@@ -140,6 +140,7 @@ export async function GET(req: Request) {
         trustScore: workflow.trustReport?.trustScore,
         riskLevel: workflow.trustReport?.riskLevel,
       },
+      aiAssessmentReport: session.aiAssessmentReport ?? null,
       payment: workflow.payment,
       review: {
         validTill,

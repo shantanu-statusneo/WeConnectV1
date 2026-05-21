@@ -483,6 +483,15 @@ export function ConciergeClient({ embed, language = "en" }: { embed?: boolean; l
           digitalVerificationComplete={digitalVerificationComplete}
           paid={paid}
           onUpgrade={onUpgrade}
+          aiAssessmentReport={aiAssessmentReport}
+          documentChecklist={documentChecklist}
+          selectedDocuments={verification.selectedDocuments}
+          documentError={verification.documentError}
+          countryConfirmed={countryConfirmed}
+          countryRequiresConfirmation={countryRequiresConfirmation}
+          visionWarning={verification.visionWarning}
+          downloadAiAssessmentReport={reports.downloadAiAssessmentReport}
+          downloadingAiReport={reports.downloadingAiReport}
         />
       </main>
     </div>
