@@ -2,6 +2,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { CertificateCard, type CertDisplay } from "../CertificateCard";
 import { RegistrationDraft } from "@/lib/registration";
 import { BadgeCheck, Clock3, CreditCard, RotateCcw, ShieldCheck } from "lucide-react";
+import { ChangeEvent } from 'react';
 
 type UpgradePortalProps = {
   show: boolean;
@@ -38,7 +39,7 @@ export function UpgradePortal({
 }: UpgradePortalProps) {
   if (!show) return null;
 
-  const handleExpiryChange = (e) => {
+  const handleExpiryChange = (e: ChangeEvent<HTMLInputElement>) => {
   // Remove all non-digits
   let value = e.target.value.replace(/\D/g, "");
   
@@ -55,7 +56,7 @@ export function UpgradePortal({
   setCardExpiry(value);
 };
 
-const handleCvvChange = (e) => {
+const handleCvvChange = (e: ChangeEvent<HTMLInputElement>) => {
   // Remove all non-digits and limit to 4 characters (some cards use 4-digit CVVs)
   const value = e.target.value.replace(/\D/g, "").slice(0, 4);
   setCardCvv(value);
