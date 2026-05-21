@@ -5,6 +5,9 @@ import type { RegistryCompany } from "./types";
 export type UploadedDocument = {
   base64: string;
   mimeType: string;
+  requirementId?: string;
+  requirementLabel?: string;
+  fileName?: string;
 };
 
 export type DocumentTriangulationResult = {

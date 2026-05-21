@@ -4,6 +4,7 @@ import { normalizeRegistrationDraft, validateRegistration } from "@/lib/registra
 import { patchDomainState, pushGovernanceNotification } from "@/lib/store/domain-store";
 import { trustLevelFromCertification } from "@/lib/domains/contracts";
 import { upsertCatalogSupplier } from "@/lib/store/buyer-catalog";
+import { CertificateIssuanceError, issueProvisionalDigitalCertificate } from "@/lib/certificate-issuance";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -80,6 +81,7 @@ export async function POST(req: Request) {
       );
     }
   }
+  let provisionalCertificate = null;
   if (typeof body.paid === "boolean") {
     setSessionPaid(sessionId, body.paid);
     const payment = body.paid
@@ -90,6 +92,17 @@ export async function POST(req: Request) {
       sessionId,
       body.paid ? "$100 payment hold placed (approval pending)" : "Payment hold removed/reset",
     );
+    const latestRegistration = getSession(sessionId)?.registration;
+    if (body.paid && latestRegistration?.cert_type === "digital") {
+      try {
+        provisionalCertificate = issueProvisionalDigitalCertificate(sessionId);
+      } catch (error) {
+        if (error instanceof CertificateIssuanceError) {
+          return NextResponse.json(error.payload, { status: error.status });
+        }
+        throw error;
+      }
+    }
   }
   if (body.company?.id && body.company.companyName) {
     setSessionCompany(sessionId, body.company.id, {
@@ -116,6 +129,7 @@ export async function POST(req: Request) {
     ok: true,
     registration: updated?.registration ?? null,
     paid: updated?.paid ?? false,
+    provisionalCertificate,
     missingRequired: validation.missingRequired,
     ownershipTotal: validation.ownershipTotal,
     isValid: validation.isValid,

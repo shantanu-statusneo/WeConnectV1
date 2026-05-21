@@ -114,6 +114,13 @@ function fallback(reason: string): AnchorSubmissionResult {
   };
 }
 
+export function createDemoAnchorResult(reason: string, diagnostics?: AnchorDiagnostics): AnchorSubmissionResult {
+  return {
+    ...fallback(reason),
+    diagnostics,
+  };
+}
+
 function nowIso() {
   return new Date().toISOString();
 }

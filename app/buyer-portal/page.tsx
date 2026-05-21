@@ -23,6 +23,7 @@ import {
 import Navbar from "@/components/layout/Navbar";
 import AuthGate from "@/components/auth/AuthGate";
 import { NAICS_CODES, UNSPSC_CODES } from "@/lib/constants";
+import { formatNaicsCode, formatUnspscCode } from "@/lib/code-labels";
 import { cn, getCertTypeLabel } from "@/lib/utils";
 import { trustLevelLabel, type RiskLevel } from "@/lib/domains/contracts";
 import type { CertType, CertStatus } from "@/types";
@@ -145,8 +146,8 @@ function toSlug(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
-function formatCodeLabels(codes: string[], labels: Map<string, string>) {
-  return codes.map((code) => labels.get(code) ?? code);
+function formatCodeLabels(codes: string[], labels: Map<string, string>, kind: "naics" | "unspsc") {
+  return codes.map((code) => labels.get(code) ?? (kind === "naics" ? formatNaicsCode(code) : formatUnspscCode(code)));
 }
 
 function generatedKeywords(row: ResultRow, naicsLabels: Map<string, string>, unspscLabels: Map<string, string>) {
@@ -155,8 +156,8 @@ function generatedKeywords(row: ResultRow, naicsLabels: Map<string, string>, uns
     row.supplier.country,
     row.supplier.business_summary,
     ...row.supplier.designations,
-    ...formatCodeLabels(row.supplier.industry_codes, naicsLabels),
-    ...formatCodeLabels(row.supplier.category_codes, unspscLabels),
+    ...formatCodeLabels(row.supplier.industry_codes, naicsLabels, "naics"),
+    ...formatCodeLabels(row.supplier.category_codes, unspscLabels, "unspsc"),
   ]
     .join(" ")
     .toLowerCase();
@@ -354,7 +355,7 @@ export default function BuyerPortalPage() {
       new Map(
         NAICS_CODES.map((entry) => [
           entry.code,
-          `${entry.code} - ${entry.label.split(",")[0]}`,
+          `${entry.code} - ${entry.label}`,
         ]),
       ),
     [],
@@ -532,7 +533,7 @@ export default function BuyerPortalPage() {
   };
 
   return (
-    <AuthGate allowed={["buyer", "seller"]}>
+    <AuthGate allowed={["buyer", "seller", "buyer_admin"]}>
       {(session) => (
     <div className="app-shell">
       <Navbar />
@@ -757,7 +758,7 @@ export default function BuyerPortalPage() {
                   Category (NAICS):{" "}
                   <span className="text-zinc-200">
                     {row.supplier.industry_codes.length
-                      ? naicsLabelByCode.get(row.supplier.industry_codes[0]) ?? row.supplier.industry_codes[0]
+                      ? naicsLabelByCode.get(row.supplier.industry_codes[0]) ?? formatNaicsCode(row.supplier.industry_codes[0])
                       : "N/A"}
                   </span>
                 </p>
@@ -908,10 +909,10 @@ export default function BuyerPortalPage() {
                     <BriefcaseBusiness size={15} className="text-[color:var(--brand-teal)]" /> Organization details
                   </p>
                   <div className="space-y-2 text-xs leading-5 text-zinc-400">
-                    <p><span className="font-semibold text-zinc-100">Industry (NAICS):</span> {formatCodeLabels(supplier.supplier.industry_codes, naicsLabelByCode).join(", ") || "N/A"}</p>
-                    <p><span className="font-semibold text-zinc-100">Category (UNSPSC):</span> {formatCodeLabels(supplier.supplier.category_codes, unspscLabelByCode).join(", ") || "N/A"}</p>
+                    <p><span className="font-semibold text-zinc-100">Industry (NAICS):</span> {formatCodeLabels(supplier.supplier.industry_codes, naicsLabelByCode, "naics").join(", ") || "N/A"}</p>
+                    <p><span className="font-semibold text-zinc-100">Category (UNSPSC):</span> {formatCodeLabels(supplier.supplier.category_codes, unspscLabelByCode, "unspsc").join(", ") || "N/A"}</p>
                     <p><span className="font-semibold text-zinc-100">Ownership:</span> {supplier.supplier.women_owned ? "Women-owned / women-led" : "Ownership data available"}</p>
-                    <p><span className="font-semibold text-zinc-100">Blockchain verified:</span> {supplier.supplier.blockchain_verified ? "Yes" : "No"}</p>
+                    {/* <p><span className="font-semibold text-zinc-100">Blockchain verified:</span> {supplier.supplier.blockchain_verified ? "Yes" : "No"}</p> */}
                     <p><span className="font-semibold text-zinc-100">Buyer activity:</span> {supplier.supplier.clients_worked_with ?? "Worked with 5 clients (mock)"}</p>
                   </div>
                 </div>

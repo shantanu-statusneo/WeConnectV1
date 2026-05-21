@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { formatCodeList } from "@/lib/code-labels";
 
 type AuditRequest = {
   supplier?: {
@@ -72,8 +73,8 @@ export async function POST(req: Request) {
     `Match Rationale: ${match.rankReason}`,
     `Buyer Query: ${body.query?.trim() || "N/A"}`,
     "",
-    `Industry (NAICS): ${supplier.industry_codes.join(", ") || "N/A"}`,
-    `Category (UNSPSC): ${supplier.category_codes.join(", ") || "N/A"}`,
+    `Industry (NAICS): ${formatCodeList(supplier.industry_codes, "naics")}`,
+    `Category (UNSPSC): ${formatCodeList(supplier.category_codes, "unspsc")}`,
     `Women Owned: ${supplier.women_owned ? "Yes" : "No"}`,
     `Blockchain Verified: ${supplier.blockchain_verified ? "Yes" : "No"}`,
     `Summary: ${supplier.business_summary || "N/A"}`,

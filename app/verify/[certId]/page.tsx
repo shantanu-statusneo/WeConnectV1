@@ -14,7 +14,7 @@ type Cert = {
   issuedAt: string;
   certificationType: "none" | "self" | "digital";
   trustLevel: "self_declared" | "self_certified" | "digitally_certified";
-  status: "active" | "revoked";
+  status: "active" | "provisional" | "revoked";
   trustScore: number;
   riskLevel: "low" | "medium" | "high";
   blockchainHash: string;
@@ -58,9 +58,9 @@ export default function VerifyPage() {
   return (
     <div className="mx-auto max-w-xl space-y-6 p-8">
       <h1 className="text-lg font-semibold text-white">Public Verification Page</h1>
-      <div className={`rounded-2xl border p-6 ${cert.revoked ? "border-rose-500/40 bg-rose-950/30" : "border-emerald-500/30 bg-emerald-950/20"}`}>
+      <div className={`rounded-2xl border p-6 ${cert.revoked ? "border-rose-500/40 bg-rose-950/30" : cert.status === "provisional" ? "border-amber-500/40 bg-amber-950/20" : "border-emerald-500/30 bg-emerald-950/20"}`}>
         <p className="text-xs uppercase tracking-widest text-zinc-500">Status</p>
-        <p className={`mt-1 text-2xl font-semibold ${cert.revoked ? "text-rose-400" : "text-emerald-400"}`}>{cert.status}</p>
+        <p className={`mt-1 text-2xl font-semibold ${cert.revoked ? "text-rose-400" : cert.status === "provisional" ? "text-amber-300" : "text-emerald-400"}`}>{cert.status}</p>
 
         <div className="mt-4 grid grid-cols-2 gap-3">
           <div className="rounded-lg border border-white/10 bg-black/20 p-3">
@@ -81,7 +81,7 @@ export default function VerifyPage() {
           </div>
           <div className="rounded-lg border border-white/10 bg-black/20 p-3">
             <p className="text-xs text-zinc-500">Blockchain Hash</p>
-            <p className="break-all font-mono text-xs text-zinc-200">{cert.blockchainHash}</p>
+            <p className="break-all font-mono text-xs text-zinc-200">{cert.blockchainHash || "Issued after supplier-admin approval"}</p>
           </div>
           <div className="rounded-lg border border-white/10 bg-black/20 p-3">
             <p className="text-xs text-zinc-500">Validity</p>

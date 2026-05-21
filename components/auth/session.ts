@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 
-export type LoginRole = "buyer" | "seller" | "admin";
+export type LoginRole = "buyer" | "seller" | "admin" | "buyer_admin";
 
 export type AuthSession = {
   role: LoginRole;
@@ -22,7 +22,7 @@ export function readAuthSession(): AuthSession | null {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as AuthSession;
-    if (parsed.role === "buyer" || parsed.role === "seller" || parsed.role === "admin") {
+    if (parsed.role === "buyer" || parsed.role === "seller" || parsed.role === "admin" || parsed.role === "buyer_admin") {
       return parsed;
     }
   } catch {
@@ -68,7 +68,7 @@ export function useAuthSession(): AuthSession | null {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as AuthSession;
-    if (parsed.role === "buyer" || parsed.role === "seller" || parsed.role === "admin") return parsed;
+    if (parsed.role === "buyer" || parsed.role === "seller" || parsed.role === "admin" || parsed.role === "buyer_admin") return parsed;
   } catch {
     return null;
   }

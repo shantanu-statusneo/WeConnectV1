@@ -36,17 +36,41 @@ export function UpgradePortal({
   paid,
   onUpgrade,
 }: UpgradePortalProps) {
-  if (!show || !cert) return null;
+  if (!show) return null;
 
+  const handleExpiryChange = (e) => {
+  // Remove all non-digits
+  let value = e.target.value.replace(/\D/g, "");
+  
+  // Limit to 4 digits total (MMYY)
+  if (value.length > 4) {
+    value = value.slice(0, 4);
+  }
+
+  // Automatically add the slash after 2 digits
+  if (value.length > 2) {
+    value = `${value.slice(0, 2)}/${value.slice(2)}`;
+  }
+
+  setCardExpiry(value);
+};
+
+const handleCvvChange = (e) => {
+  // Remove all non-digits and limit to 4 characters (some cards use 4-digit CVVs)
+  const value = e.target.value.replace(/\D/g, "").slice(0, 4);
+  setCardCvv(value);
+};
   return (
     <section className="rounded-lg border border-white/40 bg-white/80 p-4 shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] backdrop-blur-xl sm:p-6">
-      <div className="mb-6 opacity-60 scale-95 origin-top">
-        <CertificateCard cert={cert} verifyUrl={verifyUrl || `/verify/${cert.id}`} />
-      </div>
+      {cert ? (
+        <div className="mb-6 opacity-60 scale-95 origin-top">
+          <CertificateCard cert={cert} verifyUrl={verifyUrl || `/verify/${cert.id}`} />
+        </div>
+      ) : null}
 
       <h2 className="text-xl font-bold tracking-tight text-slate-900">Step 3: Digital Certification</h2>
       <p className="mt-1 text-sm text-slate-500">
-        Get your details and authenticity reviewed by our team within 72 hours for higher trust and buyer visibility.
+        Pay for digital certification to receive a provisional certificate while supplier-admin review is pending.
       </p>
 
       {paid ? (
@@ -55,7 +79,7 @@ export function UpgradePortal({
             <BadgeCheck size={16} /> Digital certification request submitted
           </p>
           <p className="mt-1 text-xs text-emerald-700">
-            A payment hold has been placed. If the request is rejected during review, the paid amount will be refunded.
+            A provisional certificate has been issued. If the request is approved, the supplier admin will issue the blockchain-backed certificate; rejected requests are refunded.
           </p>
         </div>
       ) : null}
@@ -106,14 +130,16 @@ export function UpgradePortal({
               placeholder="MM/YY"
               value={cardExpiry}
               disabled={paid}
-              onChange={(e) => setCardExpiry(e.target.value)}
+              onChange={handleExpiryChange} // Updated handler
             />
+
             <input
               className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-800 shadow-sm transition-all focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-400/10 placeholder:text-slate-400"
               placeholder="CVV"
               value={cardCvv}
               disabled={paid}
-              onChange={(e) => setCardCvv(e.target.value)}
+              type="password" // Keeps the input hidden/masked
+              onChange={handleCvvChange} // Updated handler
             />
           </div>
 

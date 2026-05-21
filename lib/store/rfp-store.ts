@@ -28,31 +28,31 @@ function seedRfps() {
   const daysAgo = (days: number) => new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString();
 
   const seeded: RfpRequest[] = [
-    {
-      id: "RFP-DEMO-1024",
-      buyerName: "Global Retail Sourcing",
-      buyerEmail: "buyer@weconnect.demo",
-      supplierId: "supplier-1",
-      supplierName: "Nile Logistics",
-      requirement: "Regional warehousing and last-mile distribution support for Q3 retail expansion.",
-      status: "responded",
-      requestedAt: daysAgo(4),
-      updatedAt: daysAgo(2),
-      sellerResponse:
-        "We can support the Q3 rollout with two regional hubs, weekly SLA reporting, and a 14-day onboarding window.",
-      sellerRespondedAt: daysAgo(2),
-    },
-    {
-      id: "RFP-DEMO-1025",
-      buyerName: "Enterprise Procurement Team",
-      buyerEmail: "buyer@weconnect.demo",
-      supplierId: "supplier-2",
-      supplierName: "Global Tech Solutions",
-      requirement: "Cybersecurity assessment partner for supplier risk review across priority vendors.",
-      status: "viewed",
-      requestedAt: daysAgo(1),
-      updatedAt: daysAgo(1),
-    },
+    // {
+    //   id: "RFP-DEMO-1024",
+    //   buyerName: "Global Retail Sourcing",
+    //   buyerEmail: "buyer@weconnect.demo",
+    //   supplierId: "supplier-1",
+    //   supplierName: "Nile Logistics",
+    //   requirement: "Regional warehousing and last-mile distribution support for Q3 retail expansion.",
+    //   status: "responded",
+    //   requestedAt: daysAgo(4),
+    //   updatedAt: daysAgo(2),
+    //   sellerResponse:
+    //     "We can support the Q3 rollout with two regional hubs, weekly SLA reporting, and a 14-day onboarding window.",
+    //   sellerRespondedAt: daysAgo(2),
+    // },
+    // {
+    //   id: "RFP-DEMO-1025",
+    //   buyerName: "Enterprise Procurement Team",
+    //   buyerEmail: "buyer@weconnect.demo",
+    //   supplierId: "supplier-2",
+    //   supplierName: "Global Tech Solutions",
+    //   requirement: "Cybersecurity assessment partner for supplier risk review across priority vendors.",
+    //   status: "viewed",
+    //   requestedAt: daysAgo(1),
+    //   updatedAt: daysAgo(1),
+    // },
   ];
 
   for (const rfp of seeded) rfpRequests.set(rfp.id, rfp);

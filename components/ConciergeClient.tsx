@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { emptyRegistrationDraft, validateRegistration } from "@/lib/registration";
+import { getDocumentChecklist } from "@/lib/document-requirements";
 import { type CertificationType, type ComplianceResult, type TrustReport } from "@/lib/domains/contracts";
 import { getTranslations, getLanguageMetadata, type Language } from "@/lib/i18n";
 import type { CertDisplay } from "@/components/CertificateCard";
@@ -129,6 +130,7 @@ export function ConciergeClient({ embed, language = "en" }: { embed?: boolean; l
 
   const verification = useVerification(
     sessionId, setAssistant, speakWithLanguage, setBadge, refreshSession, setStage, 
+    (passed) => setVisionChecks((prev) => ({ ...prev, idPassed: passed })),
     workflow?.certificationType === "self" || registration.cert_type === "self",
     runCompliance, createTrustReport
   );
@@ -157,23 +159,27 @@ export function ConciergeClient({ embed, language = "en" }: { embed?: boolean; l
   const registrationCheck = validateRegistration(registration, true);
   const readinessBlockers = [
     ...registrationCheck.missingRequired,
-    ...(requiresIdentityCheck && !visionChecks.idPassed ? ["vision_id"] : []),
+    ...(requiresIdentityCheck && !visionChecks.idPassed && stage !== "voice_attestation" ? ["vision_id"] : []),
   ];
   const countryConfirmationBlockers = countryRequiresConfirmation && !countryConfirmed ? ["country_confirmation"] : [];
   const mergedBlockers = Array.from(new Set([...readinessBlockers, ...countryConfirmationBlockers, ...anchorBlockers]));
   const readinessForIssue = mergedBlockers.length === 0;
+  const documentChecklist = useMemo(
+    () => getDocumentChecklist(registration.country, activeCertType === "none" ? "registration" : activeCertType),
+    [registration.country, activeCertType],
+  );
 
   const mockCardValid = cardNumber.replace(/\s+/g, "").length >= 12 && cardExpiry.trim().length >= 4 && cardCvv.length >= 3;
 
-  const flowSteps = ["Seller Registration", "Self Verification", "Digital Certification"] as const;
+  const flowSteps = ["Supplier Registration", "Self Verification", "Digital Certification"] as const;
   const savedRegistrationMatch = useMemo<Match | null>(() => {
     if (!registration.business_name.trim()) return null;
     const ownerTotal = registration.owner_details.reduce((sum, owner) => sum + (owner.ownershipPct || 0), 0);
     return {
       id: `saved-${sessionId ?? registration.business_name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
       companyName: registration.business_name,
-      jurisdiction: registration.country || "Saved seller profile",
-      registrySnippet: registration.business_description || "Loaded from saved seller registration.",
+      jurisdiction: registration.country || "Saved supplier profile",
+      registrySnippet: registration.business_description || "Loaded from saved supplier registration.",
       primaryOwner: registration.owner_details.map((owner) => owner.fullName).filter(Boolean).join(", ") || "Not provided",
       ownershipFemalePct: registration.women_owned ? (ownerTotal || 100) : ownerTotal || null,
       ownerPrefillPct: ownerTotal || null,
@@ -256,7 +262,7 @@ export function ConciergeClient({ embed, language = "en" }: { embed?: boolean; l
         body: JSON.stringify({ sessionId, stage: "doc_upload" }),
       });
     }
-    const msg = "Seller registration confirmed. Please upload supporting documents to begin self verification.";
+    const msg = "Supplier registration confirmed. Please upload supporting documents to begin self verification.";
     setAssistant(msg);
     speakWithLanguage(msg);
   };
@@ -372,6 +378,7 @@ export function ConciergeClient({ embed, language = "en" }: { embed?: boolean; l
           sessionId={sessionId}
           match={effectiveMatch}
           onVoice={onVoice}
+          documentChecklist={documentChecklist}
           selectedDocuments={verification.selectedDocuments}
           setSelectedDocuments={verification.setSelectedDocuments}
           handleFileUpload={verification.handleFileUpload}
@@ -399,7 +406,7 @@ export function ConciergeClient({ embed, language = "en" }: { embed?: boolean; l
         />
 
         <UpgradePortal 
-          show={currentFlowStep === 2 && Boolean(cert)}
+          show={currentFlowStep === 2}
           cert={cert}
           verifyUrl={typeof window !== "undefined" && cert ? `${window.location.origin}/verify/${cert.id}` : ""}
           registration={registration}

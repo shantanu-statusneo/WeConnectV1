@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from "react";
 import { Match, DiscoverJson, OwnershipBreakdown, OwnershipSummary } from "./types";
 import { RegistrationDraft } from "@/lib/registration";
+import { formatCodeList } from "@/lib/code-labels";
 import { CheckCircle2, ExternalLink } from "lucide-react";
 
 type DiscoveryCandidate = NonNullable<DiscoverJson["candidates"]>[number];
@@ -30,6 +31,15 @@ type RegistrationReviewProps = {
   anchorOperatorHint: string;
   onConfirmRegistration: () => void;
 };
+
+function humanizeBlocker(blocker: string) {
+  const labels: Record<string, string> = {
+    vision_id: "Webcam ID verification",
+    country_confirmation: "Country confirmation",
+    paid: "Payment",
+  };
+  return labels[blocker] ?? blocker.replaceAll("_", " ");
+}
 
 export function RegistrationReview({
   show,
@@ -68,7 +78,7 @@ export function RegistrationReview({
         <div>
           <h2 className="text-xl font-bold text-slate-900">Step 1: Confirm Seller Registration</h2>
           <p className="mt-1 text-sm text-slate-600">
-            Review the organisation details that were prefilled from registry and Google web signals, then edit anything that needs correction.
+            Review the organisation details that were prefilled from registry and Google web, then edit anything that needs correction.
           </p>
         </div>
         <button
@@ -224,6 +234,7 @@ export function RegistrationReview({
                 }))
               }
             />
+            <span className="text-xs leading-5 text-cyan-900/70">{formatCodeList(registration.naics_codes, "naics", "No NAICS code selected")}</span>
           </label>
 
           <label className="flex flex-col gap-1.5">
@@ -242,6 +253,7 @@ export function RegistrationReview({
                 }))
               }
             />
+            <span className="text-xs leading-5 text-cyan-900/70">{formatCodeList(registration.unspsc_codes, "unspsc", "No UNSPSC code selected")}</span>
           </label>
 
           <label className="flex flex-col gap-1.5">
@@ -369,7 +381,7 @@ export function RegistrationReview({
         )}
         {!!mergedBlockers.length && (
           <p className="mt-2 text-xs text-amber-400">
-            Readiness blockers: {mergedBlockers.join(", ")}
+            Readiness blockers: {mergedBlockers.map(humanizeBlocker).join(", ")}
           </p>
         )}
         {anchorFailureReason ? (

@@ -20,6 +20,7 @@ import {
   X,
 } from "lucide-react";
 import { readSellerSessionId, SELLER_SESSION_ID_KEY, useAuthSession, writeSellerSessionId } from "@/components/auth/session";
+import { formatCodeList } from "@/lib/code-labels";
 import type { Language } from "@/lib/i18n";
 import type { RegistrationDraft } from "@/lib/registration";
 
@@ -56,6 +57,9 @@ type SellerProfile = {
     ownershipFemalePct: number;
     issuedAt: string;
     txHash: string;
+    provenanceSummary?: {
+      certificateKind?: "provisional" | "blockchain_backed";
+    };
     validTill?: string;
     certificationType: "self" | "digital";
     downloadPath: string;
@@ -78,6 +82,7 @@ type SellerProfile = {
     validTill?: string;
     digitalReviewSlaHours: number;
     renewalAmountUsd: number;
+    additionalInfoRequests?: string[];
   };
 };
 
@@ -136,7 +141,7 @@ function statusMeta(status: SellerProfileStatus) {
     case "self_verified":
       return {
         label: "Self verified",
-        description: "Documents and webcam ID are complete, with a blockchain certificate available.",
+        description: "Documents and webcam ID are complete. Digital Certification is the next step.",
         className: "border-emerald-200 bg-emerald-50 text-emerald-800",
         Icon: ShieldCheck,
       };
@@ -293,11 +298,13 @@ function EditField({
   value,
   onChange,
   multiline = false,
+  helperText,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   multiline?: boolean;
+  helperText?: string;
 }) {
   const inputClass = "mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--card-elevated)] px-3 py-2 text-sm text-[color:var(--foreground)] outline-none focus:border-[color:var(--border-strong)] focus:ring-2 focus:ring-[color:var(--card-muted)]";
   return (
@@ -308,6 +315,7 @@ function EditField({
       ) : (
         <input className={inputClass} value={value} onChange={(event) => onChange(event.target.value)} />
       )}
+      {helperText ? <span className="mt-1 block text-xs leading-5 text-[color:var(--muted)]">{helperText}</span> : null}
     </label>
   );
 }
@@ -637,6 +645,7 @@ export function SellerProfileClient({ language = "en" }: { language?: Language }
   const isSelfVerified = profile.status === "self_verified";
   const isDigitalCertified = profile.status === "digital_certified";
   const isDigitalPending = profile.status === "digital_pending";
+  const hasProvisionalCertificate = profile.certificate?.provenanceSummary?.certificateKind === "provisional";
 
   return (
     <div className="grid gap-5">
@@ -705,8 +714,8 @@ export function SellerProfileClient({ language = "en" }: { language?: Language }
             <EditField label="Country" value={editForm.country} onChange={(value) => setEditForm({ ...editForm, country: value })} />
             <EditField label="Company type" value={editForm.company_type} onChange={(value) => setEditForm({ ...editForm, company_type: value })} />
             <EditField label="Primary owners" value={editForm.owner_details} onChange={(value) => setEditForm({ ...editForm, owner_details: value })} />
-            <EditField label="NAICS codes" value={editForm.naics_codes} onChange={(value) => setEditForm({ ...editForm, naics_codes: value })} />
-            <EditField label="UNSPSC codes" value={editForm.unspsc_codes} onChange={(value) => setEditForm({ ...editForm, unspsc_codes: value })} />
+            <EditField label="NAICS codes" value={editForm.naics_codes} onChange={(value) => setEditForm({ ...editForm, naics_codes: value })} helperText={formatCodeList(splitList(editForm.naics_codes), "naics", "No NAICS code selected")} />
+            <EditField label="UNSPSC codes" value={editForm.unspsc_codes} onChange={(value) => setEditForm({ ...editForm, unspsc_codes: value })} helperText={formatCodeList(splitList(editForm.unspsc_codes), "unspsc", "No UNSPSC code selected")} />
             <EditField label="Employees" value={editForm.num_employees} onChange={(value) => setEditForm({ ...editForm, num_employees: value })} />
             <EditField label="Revenue range" value={editForm.revenue_range} onChange={(value) => setEditForm({ ...editForm, revenue_range: value })} />
             <EditField label="Email" value={editForm.email} onChange={(value) => setEditForm({ ...editForm, email: value })} />
@@ -716,8 +725,8 @@ export function SellerProfileClient({ language = "en" }: { language?: Language }
         ) : (
           <>
             <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <DetailRow label="NAICS codes" value={enterprise.naicsCodes.join(", ")} />
-              <DetailRow label="UNSPSC codes" value={enterprise.unspscCodes.join(", ")} />
+              <DetailRow label="NAICS codes" value={formatCodeList(enterprise.naicsCodes, "naics")} />
+              <DetailRow label="UNSPSC codes" value={formatCodeList(enterprise.unspscCodes, "unspsc")} />
               <DetailRow label="Employees" value={enterprise.employeeRange} />
               <DetailRow label="Revenue range" value={enterprise.revenueRange} />
             </div>
@@ -768,19 +777,22 @@ export function SellerProfileClient({ language = "en" }: { language?: Language }
           {profile.certificate ? (
             <div className="mt-4 space-y-3">
               <DetailRow label="Certificate id" value={profile.certificate.id} />
+              {hasProvisionalCertificate ? <DetailRow label="Status" value="Provisional pending supplier-admin approval" /> : null}
               <DetailRow label="Valid through" value={formatDate(profile.certificate.validTill)} />
               <div className="flex flex-col gap-2 sm:flex-row">
                 <button type="button" onClick={downloadCertificate} className="btn-blue inline-flex justify-center gap-2 px-4 py-2 text-sm">
-                  <Download size={15} /> Download certificate
+                  <Download size={15} /> {hasProvisionalCertificate ? "Download provisional certificate" : "Download certificate"}
                 </button>
-                <Link href={profile.certificate.verifyPath} className="btn-outline inline-flex justify-center gap-2 px-4 py-2 text-sm">
-                  Verify public page
-                </Link>
+                {!hasProvisionalCertificate ? (
+                  <Link href={profile.certificate.verifyPath} className="btn-outline inline-flex justify-center gap-2 px-4 py-2 text-sm">
+                    Verify public page
+                  </Link>
+                ) : null}
               </div>
             </div>
           ) : (
             <p className="mt-4 text-sm leading-6 text-[color:var(--muted)]">
-              Certificate will appear after self verification is completed and anchored.
+              A provisional certificate will appear after paid digital certification is submitted.
             </p>
           )}
         </div>
@@ -793,9 +805,19 @@ export function SellerProfileClient({ language = "en" }: { language?: Language }
           </h2>
           <p className="mt-2 text-sm leading-6 text-blue-800">
             {isDigitalPending
-              ? "Your digital certification request is already under review. We verify enterprise details and authenticity within 72 hours; rejected requests are refunded."
+              ? "Your paid digital certification request is under supplier-admin review. A blockchain-backed certificate is issued only after approval; rejected requests are refunded."
               : "Recommended next step: submit a paid digital certification request for a 72-hour authenticity review."}
           </p>
+          {isDigitalPending && profile.review?.additionalInfoRequests?.length ? (
+            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900">
+              <p className="font-bold">Supplier admin requested more information</p>
+              <div className="mt-2 space-y-1 text-xs leading-5">
+                {profile.review.additionalInfoRequests.map((request) => (
+                  <p key={request}>{request}</p>
+                ))}
+              </div>
+            </div>
+          ) : null}
           {!isDigitalPending ? (
             <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-5">
               <input className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-blue-200 lg:col-span-2" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" />

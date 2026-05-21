@@ -2,10 +2,18 @@ import { useCallback, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { parseJsonSafe, fetchWithRetry } from "./utils";
 import { GeminiFallbackReason, GeminiQuotaSubtype } from "./types";
+import type { DocumentChecklist } from "@/lib/document-requirements";
+import { getMissingRequiredDocumentIds } from "@/lib/document-requirements";
 
 export type VerificationProgressStep = {
   label: string;
   status: "pending" | "running" | "done";
+};
+
+export type SelectedDocument = {
+  requirementId: string;
+  requirementLabel: string;
+  file: File;
 };
 
 const DOCUMENT_PROGRESS_LABELS = [
@@ -39,6 +47,7 @@ export function useVerification(
   setBadge: (v: string | null) => void,
   refreshSession: (sid: string) => Promise<void>,
   setStage: (v: string) => void,
+  setVisionIdPassed: (passed: boolean) => void,
   isSelfPath: boolean,
   runCompliance: () => Promise<void>,
   createTrustReport: () => Promise<void>,
@@ -48,7 +57,7 @@ export function useVerification(
   const [visionWarning, setVisionWarning] = useState("");
   const [visionBlockers, setVisionBlockers] = useState<string[]>([]);
   const [isVerifyingDocs, setIsVerifyingDocs] = useState(false);
-  const [selectedDocuments, setSelectedDocuments] = useState<File[]>([]);
+  const [selectedDocuments, setSelectedDocuments] = useState<SelectedDocument[]>([]);
   const [documentError, setDocumentError] = useState("");
   const [documentProgress, setDocumentProgress] = useState<VerificationProgressStep[]>([]);
   const [videoProgress, setVideoProgress] = useState<VerificationProgressStep[]>([]);
@@ -98,6 +107,7 @@ export function useVerification(
       quotaFallback?: boolean;
       fallbackReason?: GeminiFallbackReason;
       fallbackSubtype?: GeminiQuotaSubtype;
+      suggestedNextStage?: string;
     }>(r);
     setScanning(false);
     if (!parsed.ok || !parsed.data) {
@@ -109,7 +119,14 @@ export function useVerification(
     // Handle quota fallback notice logic would need to be passed up or managed here
     await refreshSession(sessionId);
     if (j.stage) setStage(j.stage);
-    setVisionBlockers(j.blockers ?? []);
+    const visionPassed = j.stage === "voice_attestation" || j.suggestedNextStage === "voice_attestation";
+    if (visionPassed) {
+      setVisionIdPassed(true);
+      setVisionBlockers([]);
+    } else {
+      setVisionIdPassed(false);
+      setVisionBlockers(j.blockers ?? []);
+    }
     if (j.visionNameMatchBypassed) {
       setVisionWarning("Owner identity was not available from source; verification continued with warning.");
     } else {
@@ -121,38 +138,59 @@ export function useVerification(
         ? `ID VIDEO VERIFIED · pass (conf ${conf})`
         : `ID VIDEO REVIEW · manual review suggested (conf ${conf})`,
     );
-    if (j.stage === "voice_attestation") {
+    if (visionPassed) {
       setVisionNote("ID video verified. Ownership remains prefill-derived and not vision-verified.");
       if (isSelfPath) {
         await runCompliance();
         await createTrustReport();
       }
       const prompt = isSelfPath
-        ? "ID verification complete. Your self verification is ready for blockchain certificate issuance."
+        ? "ID verification complete. Go for the digital certification to get a blockchain-anchored certificate and increase buyer trust and discovery."
         : "ID verification complete. Please proceed to the next verification step.";
       setAssistant(prompt);
       speakWithLanguage(prompt);
     }
     return j;
-  }, [sessionId, setAssistant, speakWithLanguage, setBadge, refreshSession, setStage, runProgressSteps, isSelfPath, runCompliance, createTrustReport]);
+  }, [sessionId, setAssistant, speakWithLanguage, setBadge, refreshSession, setStage, setVisionIdPassed, runProgressSteps, isSelfPath, runCompliance, createTrustReport]);
 
-  const verifyDocuments = useCallback(async (files: File[]) => {
-    if (!sessionId || !files.length) return;
+  const verifyDocuments = useCallback(async (documentsToVerify: SelectedDocument[], checklist: DocumentChecklist) => {
+    if (!sessionId || !documentsToVerify.length) return;
+    const missingRequiredIds = getMissingRequiredDocumentIds(
+      checklist,
+      documentsToVerify.map((entry) => entry.requirementId),
+    );
+    if (missingRequiredIds.length) {
+      const missingLabels = checklist.requirements
+        .filter((requirement) => missingRequiredIds.includes(requirement.id))
+        .map((requirement) => requirement.label)
+        .join(", ");
+      const message = `Please upload required documents before verification: ${missingLabels}.`;
+      setDocumentError(message);
+      setAssistant(message);
+      speakWithLanguage(message);
+      return;
+    }
     setIsVerifyingDocs(true);
     setDocumentError("");
     setDocumentProgress([]);
     try {
       const documents = await Promise.all(
-        files.map(async (f) => {
-          return new Promise<{ base64: string; mimeType: string }>((resolve, reject) => {
+        documentsToVerify.map(async (entry) => {
+          return new Promise<{ base64: string; mimeType: string; requirementId: string; requirementLabel: string; fileName: string }>((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = (event) => {
               const dataUrl = event.target?.result as string;
               const base64 = dataUrl.split(",")[1];
-              resolve({ base64, mimeType: f.type });
+              resolve({
+                base64,
+                mimeType: entry.file.type,
+                requirementId: entry.requirementId,
+                requirementLabel: entry.requirementLabel,
+                fileName: entry.file.name,
+              });
             };
             reader.onerror = reject;
-            reader.readAsDataURL(f);
+            reader.readAsDataURL(entry.file);
           });
         })
       );
@@ -161,7 +199,17 @@ export function useVerification(
       const res = await fetchWithRetry("/api/document-verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId, documents }),
+        body: JSON.stringify({
+          sessionId,
+          documents,
+          checklist: {
+            countryGroup: checklist.countryGroup,
+            certificationPath: checklist.path,
+            requiredDocumentIds: checklist.requirements
+              .filter((requirement) => requirement.requiredFor.includes(checklist.path))
+              .map((requirement) => requirement.id),
+          },
+        }),
       });
       await progressPromise;
 
@@ -212,31 +260,31 @@ export function useVerification(
     }
   }, [sessionId, setAssistant, speakWithLanguage, setStage, refreshSession, runProgressSteps]);
 
-  const updateSelectedDocuments = useCallback((files: File[]) => {
+  const updateSelectedDocuments = useCallback((files: SelectedDocument[]) => {
     setDocumentError("");
     setSelectedDocuments(files);
   }, []);
 
-  const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = useCallback(async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    requirement: { id: string; label: string },
+    checklist: DocumentChecklist,
+  ) => {
     const files = Array.from(e.target.files || []);
     e.target.value = "";
     if (!files.length) return;
 
-    const next = [...selectedDocuments];
-    const seen = new Set(next.map((f) => `${f.name}:${f.size}:${f.lastModified}:${f.type}`));
-    for (const file of files) {
-      const sig = `${file.name}:${file.size}:${file.lastModified}:${file.type}`;
-      if (seen.has(sig)) continue;
-      if (next.length >= 3) {
-        alert("Maximum 3 documents allowed.");
-        break;
-      }
-      seen.add(sig);
-      next.push(file);
-    }
-    if (!next.length) return;
+    const file = files[0];
+    const next = [
+      ...selectedDocuments.filter((entry) => entry.requirementId !== requirement.id),
+      {
+        requirementId: requirement.id,
+        requirementLabel: requirement.label,
+        file,
+      },
+    ];
     setSelectedDocuments(next);
-    await verifyDocuments(next);
+    await verifyDocuments(next, checklist);
   }, [selectedDocuments, verifyDocuments]);
 
   return {

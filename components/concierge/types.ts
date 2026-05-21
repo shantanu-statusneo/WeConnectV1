@@ -93,8 +93,8 @@ export type DiscoverJson = {
     companyType?: string;
   };
   classificationSummary?: {
-    naics?: { sourceType?: "authoritative" | "serp_explicit" | "inferred" | "unresolved"; confidence?: number };
-    unspsc?: { sourceType?: "authoritative" | "serp_explicit" | "inferred" | "unresolved"; confidence?: number };
+    naics?: { codes?: string[]; sourceType?: "authoritative" | "serp_explicit" | "inferred" | "unresolved"; confidence?: number };
+    unspsc?: { codes?: string[]; sourceType?: "authoritative" | "serp_explicit" | "inferred" | "unresolved"; confidence?: number };
   };
   prefill?: RegistrationDraft;
   fieldConfidence?: Partial<Record<keyof RegistrationDraft, number>>;
@@ -144,6 +144,10 @@ export type AiAssessmentReport = {
     verified: boolean;
     confidence: number;
     summary: string;
+    countryGroup?: string;
+    certificationPath?: string;
+    submittedRequirementIds?: string[];
+    requiredDocumentIds?: string[];
     checkedAt: string;
   };
   identity?: {

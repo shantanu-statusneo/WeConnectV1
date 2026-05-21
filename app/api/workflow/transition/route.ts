@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession, getSessionRegistration, setSessionRegistration } from "@/lib/session-store";
+import { getSession, getSessionRegistration, setSessionPaid, setSessionRegistration } from "@/lib/session-store";
 import {
   selectCertificationType,
   transitionPayment,
@@ -9,6 +9,7 @@ import {
 import { getDomainState } from "@/lib/store/domain-store";
 import type { CertificationStage, CertificationType, PaymentState } from "@/lib/domains/contracts";
 import { emptyRegistrationDraft } from "@/lib/registration";
+import { CertificateIssuanceError, issueProvisionalDigitalCertificate } from "@/lib/certificate-issuance";
 
 export async function POST(req: Request) {
   const body = (await req.json()) as {
@@ -52,6 +53,20 @@ export async function POST(req: Request) {
     next = updateQuestionnaireAnswers(body.sessionId, body.questionnaireAnswers ?? {});
   } else if (body.action === "payment_transition" && body.paymentState) {
     next = transitionPayment(body.sessionId, body.paymentState);
+    if (body.paymentState === "hold_placed" || body.paymentState === "captured") {
+      setSessionPaid(body.sessionId, true);
+    }
+    const registration = getSessionRegistration(body.sessionId);
+    if (body.paymentState === "hold_placed" && registration?.cert_type === "digital") {
+      try {
+        issueProvisionalDigitalCertificate(body.sessionId);
+      } catch (error) {
+        if (error instanceof CertificateIssuanceError) {
+          return NextResponse.json(error.payload, { status: error.status });
+        }
+        throw error;
+      }
+    }
   }
 
   return NextResponse.json({ ok: true, workflow: next });

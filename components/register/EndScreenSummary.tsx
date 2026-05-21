@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { ArrowRight, CheckCircle, PartyPopper, Sparkles } from "lucide-react";
 import type { RegistrationState } from "@/types";
+import { formatCodeList } from "@/lib/code-labels";
 
 export default function EndScreenSummary({
   answers,
@@ -53,7 +54,8 @@ export default function EndScreenSummary({
           <SummaryRow label="Employees" value={answers.num_employees || "—"} />
           <SummaryRow label="Revenue" value={answers.revenue_range || "—"} />
           <SummaryRow label="Certification" value={certLabel} />
-          <SummaryRow label="NAICS Codes" value={answers.naics_codes.join(", ") || "—"} />
+          <SummaryRow label="NAICS Codes" value={formatCodeList(answers.naics_codes, "naics", "—")} />
+          <SummaryRow label="UNSPSC Codes" value={formatCodeList(answers.unspsc_codes, "unspsc", "—")} />
         </div>
 
         <button
@@ -83,7 +85,7 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-2">
       <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{label}</span>
-      <span className="text-sm font-medium text-gray-800 text-right truncate max-w-[60%]">
+      <span className="text-sm font-medium text-gray-800 text-right max-w-[60%]">
         {value !== "—" && <CheckCircle size={12} className="inline text-green-500 mr-1" />}
         {value}
       </span>

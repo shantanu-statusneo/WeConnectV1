@@ -1,10 +1,22 @@
 import { NextResponse } from "next/server";
 import { createSession, ensureSession } from "@/lib/session-store";
 import { getDomainState } from "@/lib/store/domain-store";
+import type { SessionRecord } from "@/lib/session-store";
+
+function resolveSessionStage(session: SessionRecord, requestedStage?: string) {
+  const documentsVerified = Boolean(session.aiAssessmentReport?.documents?.verified);
+  const identityVerified =
+    Boolean(session.visionChecks?.idPassed) ||
+    Boolean(session.aiAssessmentReport?.identity?.idFaceMatch) ||
+    session.stage === "voice_attestation";
+  if (documentsVerified && identityVerified) return "voice_attestation";
+  return requestedStage ?? session.stage;
+}
 
 export async function POST(req: Request) {
   const body = (await req.json().catch(() => ({}))) as { sessionId?: string };
   const s = body.sessionId ? createSession(body.sessionId) : createSession();
+  s.stage = resolveSessionStage(s) as typeof s.stage;
   getDomainState(s.id);
   return NextResponse.json({
     sessionId: s.id,
@@ -20,6 +32,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "missing id" }, { status: 400 });
   }
   const s = ensureSession(id);
+  s.stage = resolveSessionStage(s) as typeof s.stage;
   const workflow = getDomainState(id);
   return NextResponse.json({
     sessionId: s.id,
@@ -51,7 +64,7 @@ export async function PATCH(req: Request) {
   const s = ensureSession(id);
   
   if (body.stage) {
-    s.stage = body.stage;
+    s.stage = resolveSessionStage(s, body.stage) as typeof s.stage;
   }
   
   return NextResponse.json({ ok: true });

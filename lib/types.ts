@@ -36,6 +36,7 @@ export type CertificateRecord = {
   attestationSummary?: string;
   manualReviewSuggested?: boolean;
   provenanceSummary?: {
+    certificateKind?: "provisional" | "blockchain_backed";
     certType?: string;
     paidAtIssuance?: boolean;
     anchorMode?: "real" | "demo";

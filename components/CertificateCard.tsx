@@ -9,6 +9,9 @@ export type CertDisplay = {
   ownershipFemalePct: number;
   issuedAt: string;
   txHash: string;
+  provenanceSummary?: {
+    certificateKind?: "provisional" | "blockchain_backed";
+  };
   revoked?: boolean;
 };
 
@@ -18,7 +21,8 @@ type Props = {
 };
 
 export function CertificateCard({ cert, verifyUrl }: Props) {
-  const txUrl = cert.txHash ? `https://sepolia.basescan.org/tx/${cert.txHash}` : "";
+  const isProvisional = cert.provenanceSummary?.certificateKind === "provisional";
+  const txUrl = cert.txHash && !isProvisional ? `https://sepolia.basescan.org/tx/${cert.txHash}` : "";
   let apiUrl = "";
   try {
     const verify = new URL(verifyUrl);
@@ -38,7 +42,7 @@ export function CertificateCard({ cert, verifyUrl }: Props) {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-500/90">
-            WEC · Live soulbound certificate
+            {isProvisional ? "WEC · Provisional digital certificate" : "WEC · Live soulbound certificate"}
           </p>
           <h3 className="mt-1 text-xl font-semibold text-white">{cert.companyName}</h3>
           <p className="mt-2 text-sm text-zinc-400">
@@ -49,7 +53,7 @@ export function CertificateCard({ cert, verifyUrl }: Props) {
             <span className="text-emerald-400">{cert.ownershipFemalePct}%</span>
           </p>
           <p className="mt-3 font-mono text-[11px] text-zinc-500 break-all">
-            QID tx: {cert.txHash}
+            {isProvisional ? "Review reference" : "QID tx"}: {cert.txHash}
           </p>
           <p className="mt-1 text-xs text-zinc-600">Issued {new Date(cert.issuedAt).toLocaleString()}</p>
         </div>

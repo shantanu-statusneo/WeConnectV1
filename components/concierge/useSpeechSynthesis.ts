@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect } from "react";
 
 let ttsUnlocked = false;
 let pendingSpeechText: string | null = null;
@@ -10,11 +10,14 @@ function selectVoice(langCode: string): SpeechSynthesisVoice | null {
   if (typeof window === "undefined" || !window.speechSynthesis) return null;
   const voices = window.speechSynthesis.getVoices();
   if (!voices.length) return null;
+  const clearVoicePattern = /google us english|microsoft (aria|jenny|guy|david|zira)|samantha|alex|daniel|karen/i;
+  const usableVoices = voices.filter((v) => !/compact|novelty|whisper|trinoids|zarvox/i.test(v.name));
   return (
-    voices.find((v) => v.lang === langCode) ??
-    voices.find((v) => v.lang.startsWith(langCode.split("-")[0])) ??
-    voices.find((v) => /en-US|en_US/i.test(v.lang)) ??
-    voices.find((v) => /^en/i.test(v.lang)) ??
+    usableVoices.find((v) => clearVoicePattern.test(v.name) && /^en[-_]/i.test(v.lang)) ??
+    usableVoices.find((v) => /en-US|en_US/i.test(v.lang)) ??
+    usableVoices.find((v) => /^en[-_]/i.test(v.lang)) ??
+    usableVoices.find((v) => v.lang === langCode) ??
+    usableVoices.find((v) => v.lang.startsWith(langCode.split("-")[0])) ??
     voices[0] ??
     null
   );
@@ -27,10 +30,11 @@ function flushSpeechQueue(langCode: string) {
   if (!nextText) return;
   
   const utterance = new SpeechSynthesisUtterance(nextText);
-  utterance.rate = 1;
-  utterance.pitch = 1;
-  utterance.lang = langCode;
   const voice = selectVoice(langCode);
+  utterance.rate = 0.98;
+  utterance.pitch = 1.08;
+  utterance.volume = 1;
+  utterance.lang = voice?.lang ?? "en-US";
   if (voice) utterance.voice = voice;
   speechActive = true;
   utterance.onend = () => {

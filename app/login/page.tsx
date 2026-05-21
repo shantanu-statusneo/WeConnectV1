@@ -8,6 +8,7 @@ import {
   Building2,
   Crown,
   LockKeyhole,
+  ShieldCheck,
   ShoppingBag,
 } from "lucide-react";
 import { writeAuthSession, type LoginRole } from "@/components/auth/session";
@@ -28,24 +29,37 @@ const ROLE_CARDS: Array<{
   },
   {
     role: "seller",
-    title: "Seller",
-    description: "Open the seller profile and continue registration if needed.",
+    title: "Supplier",
+    description: "Open the supplier profile and continue registration if needed.",
     icon: Building2,
   },
   {
     role: "admin",
-    title: "Admin",
-    description: "Access every portal plus certification request dashboards.",
+    title: "WEConnect Supplier Admin",
+    description: "Review supplier certifications, risk flags, and platform analytics.",
     icon: Crown,
+  },
+  {
+    role: "buyer_admin",
+    title: "WEConnect Buyer Admin",
+    description: "Approve buyer organizations and manage buyer portal access.",
+    icon: ShieldCheck,
   },
 ];
 
 export default function LoginPage() {
   const router = useRouter();
   const [role, setRole] = useState<LoginRole>("buyer");
-  const [next] = useState(() =>
-    typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("next"),
-  );
+
+  const nextPath = () =>
+    typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("next");
+
+  const roleNextPath = (fallback: string, allowedPrefixes: string[]) => {
+    const next = nextPath();
+    return next && next !== "/login" && allowedPrefixes.some((prefix) => next === prefix || next.startsWith(`${prefix}/`))
+      ? next
+      : fallback;
+  };
 
   const loginAsBuyer = () => {
     writeAuthSession({
@@ -60,11 +74,22 @@ export default function LoginPage() {
   const loginAsAdmin = () => {
     writeAuthSession({
       role: "admin",
-      name: "Admin User",
-      email: "admin@weconnect.demo",
+      name: "WEConnect Supplier Admin",
+      email: "supplier.admin@weconnect.demo",
       createdAt: new Date().toISOString(),
     });
-    router.push(next && next !== "/login" ? next : "/admin");
+    const next = nextPath();
+    router.push(next && next !== "/login" && next.startsWith("/admin") && next !== "/admin/review" ? next : "/admin");
+  };
+
+  const loginAsBuyerAdmin = () => {
+    writeAuthSession({
+      role: "buyer_admin",
+      name: "WEConnect Buyer Admin",
+      email: "buyer.admin@weconnect.demo",
+      createdAt: new Date().toISOString(),
+    });
+    router.push(roleNextPath("/buyer-admin", ["/buyer-admin", "/buyer-portal"]));
   };
 
   const loginAsSeller = () => {
@@ -98,7 +123,7 @@ export default function LoginPage() {
               Enter the women-owned enterprise network.
             </h1>
             <p className="mt-4 max-w-md text-sm leading-6 text-[color:var(--muted)]">
-              Buyers discover trusted suppliers, sellers complete certification, and admins manage review operations from one polished workspace.
+              Buyers discover trusted suppliers, sellers complete certification, and WEConnect admins manage supplier and buyer operations from one polished workspace.
             </p>
           </div>
 
@@ -161,12 +186,12 @@ export default function LoginPage() {
                 <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-lg bg-[color:var(--card-muted)] text-[color:var(--brand-plum)] ring-1 ring-[color:var(--border)]">
                   <Crown size={24} />
                 </div>
-                <h2 className="text-xl font-bold text-[color:var(--foreground)]">Admin login</h2>
+                <h2 className="text-xl font-bold text-[color:var(--foreground)]">WEConnect Supplier Admin login</h2>
                 <p className="mt-2 max-w-xl text-sm leading-6 text-[color:var(--muted)]">
-                  Admins can open buyer, seller, analytics, review, fraud monitoring, and digital certification request dashboards.
+                  Supplier admins manage certification review, fraud monitoring, supplier analytics, and digital certification requests.
                 </p>
                 <div className="mt-6 rounded-lg border border-[color:var(--border)] bg-[color:var(--card-muted)] p-4 text-sm text-[color:var(--muted)]">
-                  Demo account: <span className="font-mono font-semibold text-[color:var(--foreground)]">admin@weconnect.demo</span>
+                  Demo account: <span className="font-mono font-semibold text-[color:var(--foreground)]">supplier.admin@weconnect.demo</span>
                 </div>
                 <div className="mt-6 rounded-lg border border-[color:var(--border)] bg-[color:var(--card-muted)] p-4 text-sm text-[color:var(--muted)]">
                   Demo password: <span className="font-mono font-semibold text-[color:var(--foreground)]">*****************</span>
@@ -177,7 +202,34 @@ export default function LoginPage() {
                 onClick={loginAsAdmin}
                 className="btn-purple mt-8 w-full gap-2"
               >
-                Continue as admin <ArrowRight size={16} />
+                Continue as supplier admin <ArrowRight size={16} />
+              </button>
+            </div>
+          ) : null}
+
+          {role === "buyer_admin" ? (
+            <div className="flex h-full w-full flex-col justify-between">
+              <div>
+                <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-lg bg-[color:var(--card-muted)] text-[color:var(--brand-teal)] ring-1 ring-[color:var(--border)]">
+                  <ShieldCheck size={24} />
+                </div>
+                <h2 className="text-xl font-bold text-[color:var(--foreground)]">WEConnect Buyer Admin login</h2>
+                <p className="mt-2 max-w-xl text-sm leading-6 text-[color:var(--muted)]">
+                  Buyer admins approve buyer organizations, activate portal access, assign roles, and monitor buyer engagement.
+                </p>
+                <div className="mt-6 rounded-lg border border-[color:var(--border)] bg-[color:var(--card-muted)] p-4 text-sm text-[color:var(--muted)]">
+                  Demo account: <span className="font-mono font-semibold text-[color:var(--foreground)]">buyer.admin@weconnect.demo</span>
+                </div>
+                <div className="mt-6 rounded-lg border border-[color:var(--border)] bg-[color:var(--card-muted)] p-4 text-sm text-[color:var(--muted)]">
+                  Demo password: <span className="font-mono font-semibold text-[color:var(--foreground)]">*****************</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={loginAsBuyerAdmin}
+                className="btn-blue mt-8 w-full gap-2"
+              >
+                Continue as buyer admin <ArrowRight size={16} />
               </button>
             </div>
           ) : null}

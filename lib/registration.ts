@@ -2,6 +2,7 @@ import type { RegistryCompany } from "./types";
 import type { EnrichmentSummary } from "./enrichment";
 import type { CodeClassification } from "./code-classification";
 import type { OwnershipSourceType } from "./india-ownership";
+import { formatCodeList } from "./code-labels";
 
 export type FieldSource = "registry" | "web" | "manual";
 
@@ -356,14 +357,14 @@ export function mapCompanyToPrefill(
         ? "Ownership percentages sourced from exchange shareholding filing."
         : "Owner from available company record.",
     naics_codes: classification
-      ? `Classification (${classification.naics.sourceType}, ${classification.naics.confidence}%): ${classification.naics.evidence.join(" ")}`
+      ? `Classification (${classification.naics.sourceType}, ${classification.naics.confidence}%): ${formatCodeList(classification.naics.codes, "naics", "No NAICS code")} ${classification.naics.evidence.join(" ")}`
       : enrichment?.naicsCodes?.length
-        ? `Detected NAICS from web content: ${enrichment.naicsCodes.join(", ")}`
+        ? `Detected NAICS from web content: ${formatCodeList(enrichment.naicsCodes, "naics")}`
         : "Could not infer NAICS from available web sources.",
     unspsc_codes: classification
-      ? `Classification (${classification.unspsc.sourceType}, ${classification.unspsc.confidence}%): ${classification.unspsc.evidence.join(" ")}`
+      ? `Classification (${classification.unspsc.sourceType}, ${classification.unspsc.confidence}%): ${formatCodeList(classification.unspsc.codes, "unspsc", "No UNSPSC code")} ${classification.unspsc.evidence.join(" ")}`
       : enrichment?.unspscCodes?.length
-        ? `Detected UNSPSC from web content: ${enrichment.unspscCodes.join(", ")}`
+        ? `Detected UNSPSC from web content: ${formatCodeList(enrichment.unspscCodes, "unspsc")}`
         : "Could not infer UNSPSC from available web sources.",
     business_description: enrichment?.industryHint
       ? "Generated from extracted industry/company description."

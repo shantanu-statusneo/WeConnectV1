@@ -554,6 +554,9 @@ export async function runDocumentVerification(
   companySnapshot?: RegistryCompany,
 ): Promise<DocumentVerificationResult> {
   const triangulation = triangulateDocuments(registration, documents, companySnapshot);
+  const documentLabels = documents
+    .map((doc, index) => `${index + 1}. ${doc.requirementLabel || doc.requirementId || "Uncategorized document"}${doc.fileName ? ` (${doc.fileName})` : ""}`)
+    .join("\n");
   const prompt = `Please review the attached business registration documents.
 Triangulate the uploaded document against the seller registration and registry evidence.
 
@@ -568,6 +571,9 @@ Registry evidence:
 - Registry snippet: ${companySnapshot?.registrySnippet ?? "not available"}
 - Primary owner: ${companySnapshot?.primaryOwner ?? "not available"}
 - Directors: ${companySnapshot?.directors.join(", ") ?? "not available"}
+
+Uploaded checklist categories:
+${documentLabels || "No category metadata provided."}
 
 Confirm only when the document supports the same entity, jurisdiction or registry number, and owner/director evidence. Reject wrong-company documents with clear mismatch reasons.
 
@@ -584,7 +590,7 @@ Return JSON only:
     return { ...triangulation, quotaFallback: false };
   }
 
-  const parts: any[] = [{ text: prompt }];
+  const parts: unknown[] = [{ text: prompt }];
   for (const doc of documents) {
     parts.push({
       inlineData: { data: doc.base64, mimeType: doc.mimeType },

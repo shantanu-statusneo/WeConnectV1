@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Network, BookOpen, ShoppingBag, LayoutDashboard, Menu, X, LogIn, LogOut, ShieldCheck, UserRound, ClipboardList } from "lucide-react";
+import { Network, BookOpen, ShoppingBag, LayoutDashboard, Menu, X, LogIn, LogOut, ShieldCheck, UserRound, ClipboardList, Crown, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { type Language } from "@/lib/i18n";
@@ -23,12 +23,26 @@ export default function Navbar({ language = "en" }: { language?: Language }) {
   ];
   const links = baseLinks.filter((link) => {
     if (session?.role === "buyer") return link.href === "/buyer-portal";
+    if (session?.role === "buyer_admin") return link.href === "/buyer-portal";
     if (session?.role === "seller") return link.href === `/${language}/dashboard` || link.href === `/${language}/profile` || link.href === "/seller-portal" || link.href === "/ecosystem";
+    if (session?.role === "admin") return false;
     return true;
   });
-  const adminLinks = session?.role === "admin"
-    ? [{ href: "/admin", label: "Admin", icon: ShieldCheck }]
-    : [];
+  const adminLinks = [
+    ...(session?.role === "admin"
+      ? [
+          { href: `/${language}/dashboard`, label: "New Supplier Registration", icon: LayoutDashboard },
+          { href: "/admin", label: "Digital Certification Dashboard", icon: ShieldCheck },
+          { href: "/admin/analytics", label: "Analytics", icon: BarChart3 },
+        ]
+      : []),
+    ...(session?.role === "buyer_admin"
+      ? [
+          { href: "/buyer-admin", label: "Admin Dashboard", icon: Crown },
+          { href: "/buyer-admin/analytics", label: "Buyers Analytics", icon: BarChart3 },
+        ]
+      : []),
+  ];
 
   const logout = () => {
     clearAuthSession();

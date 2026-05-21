@@ -34,16 +34,23 @@ function hasRegisteredEnterprise(registration?: RegistrationDraft) {
 }
 
 function resolveStatus(
+  session: { stage: string; aiAssessmentReport?: { documents?: { verified: boolean } }; visionChecks?: { idPassed?: boolean } },
   registration: RegistrationDraft | undefined,
   workflow: DomainState,
   certificate: CertificateRecord | null,
 ): SellerProfileStatus {
   if (!registration?.business_name.trim()) return "not_registered";
   if (!certificate) {
-    return workflow.certificationType === "digital" || workflow.payment.state === "hold_placed"
-      ? "digital_pending"
-      : "registered";
+    if (workflow.certificationType === "digital" || workflow.payment.state === "hold_placed") {
+      return "digital_pending";
+    }
+    const selfVerificationComplete =
+      Boolean(session.aiAssessmentReport?.documents?.verified) &&
+      (Boolean(session.visionChecks?.idPassed) || session.stage === "voice_attestation");
+    if (selfVerificationComplete) return "self_verified";
+    return "registered";
   }
+  if (certificate.provenanceSummary?.certificateKind === "provisional") return "digital_pending";
   const issuedAsDigital = certificate.provenanceSummary?.certType === "digital";
   const workflowSaysDigitalCertified =
     workflow.certificationType === "digital" &&
@@ -85,7 +92,7 @@ export async function GET(req: Request) {
     listCertificates()
       .filter((cert) => cert.sessionId === session.id && !cert.revoked)
       .sort((a, b) => new Date(b.issuedAt).getTime() - new Date(a.issuedAt).getTime())[0] ?? null;
-  const status = resolveStatus(session.registration, workflow, certificate);
+  const status = resolveStatus(session, session.registration, workflow, certificate);
   const validTill = certificate
     ? workflow.governance.validTill ?? addYears(certificate.issuedAt, 3)
     : workflow.governance.validTill;
@@ -119,6 +126,7 @@ export async function GET(req: Request) {
             ownershipFemalePct: certificate.ownershipFemalePct,
             issuedAt: certificate.issuedAt,
             txHash: certificate.txHash,
+            provenanceSummary: certificate.provenanceSummary,
             validTill,
             certificationType: status === "digital_certified" ? "digital" : "self",
             downloadPath: `/api/certificate/${certificate.id}/document`,
@@ -136,6 +144,9 @@ export async function GET(req: Request) {
         validTill,
         digitalReviewSlaHours: 72,
         renewalAmountUsd: workflow.payment.amountUsd,
+        additionalInfoRequests: workflow.governance.notifications.filter((notification) =>
+          notification.includes("Supplier admin requested additional information"),
+        ),
       },
     },
   });

@@ -1,5 +1,6 @@
 import { type WebCompanyCandidate, searchWebByQuery } from "./web-search";
 import { extractCompanyDataFromSnippets } from "./gemini";
+import { formatCodeList } from "./code-labels";
 
 export type EnrichmentSummary = {
   legalName?: string;
@@ -404,8 +405,8 @@ export async function enrichCompanyCandidate(
   }
   if (ownerName) evidence.push(`Owner/founder hint: ${ownerName}`);
   if (founderNames.length) evidence.push(`Founder names: ${founderNames.join(", ")}`);
-  if (naicsCodes.length) evidence.push(`NAICS codes detected from web text: ${naicsCodes.join(", ")}`);
-  if (unspscCodes.length) evidence.push(`UNSPSC codes detected from web text: ${unspscCodes.join(", ")}`);
+  if (naicsCodes.length) evidence.push(`NAICS codes detected from web text: ${formatCodeList(naicsCodes, "naics")}`);
+  if (unspscCodes.length) evidence.push(`UNSPSC codes detected from web text: ${formatCodeList(unspscCodes, "unspsc")}`);
   if (industryHint) evidence.push(`Industry hint extracted from text.`);
   if (employeeHint) evidence.push(`Employee hint extracted.`);
   if (revenueHint) evidence.push(`Revenue hint extracted.`);

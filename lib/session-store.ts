@@ -12,6 +12,10 @@ export type AiAssessmentReport = {
     verified: boolean;
     confidence: number;
     summary: string;
+    countryGroup?: string;
+    certificationPath?: string;
+    submittedRequirementIds?: string[];
+    requiredDocumentIds?: string[];
     checkedAt: string;
   };
   identity?: {
@@ -28,6 +32,14 @@ export type AiAssessmentReport = {
     status: "partial" | "ready";
     score: number;
   };
+};
+
+export type UploadedDocumentRecord = {
+  requirementId?: string;
+  requirementLabel?: string;
+  fileName?: string;
+  mimeType?: string;
+  uploadedAt: string;
 };
 
 export type SessionRecord = {
@@ -68,6 +80,7 @@ export type SessionRecord = {
     idPassed?: boolean;
   };
   aiAssessmentReport?: AiAssessmentReport;
+  uploadedDocuments?: UploadedDocumentRecord[];
   lastAnchorError?: {
     at: string;
     reasonCode: string;
@@ -292,6 +305,17 @@ export function setSessionVisionChecks(
   const s = sessions.get(sessionId);
   if (!s) return;
   s.visionChecks = { ...(s.visionChecks ?? {}), ...(checks ?? {}) };
+  touchSession(s);
+}
+
+export function setSessionUploadedDocuments(
+  sessionId: string,
+  documents: Omit<UploadedDocumentRecord, "uploadedAt">[],
+) {
+  const s = sessions.get(sessionId);
+  if (!s) return;
+  const uploadedAt = new Date().toISOString();
+  s.uploadedDocuments = documents.map((document) => ({ ...document, uploadedAt }));
   touchSession(s);
 }
 

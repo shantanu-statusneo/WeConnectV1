@@ -1,6 +1,8 @@
 import { VoiceConcierge } from "../VoiceConcierge";
 import { WebcamCapture } from "../WebcamCapture";
-import type { VerificationProgressStep } from "./useVerification";
+import type { SelectedDocument, VerificationProgressStep } from "./useVerification";
+import type { DocumentChecklist, DocumentRequirement } from "@/lib/document-requirements";
+import { getMissingRequiredDocumentIds } from "@/lib/document-requirements";
 import { AlertTriangle, CheckCircle2, FileUp, ShieldCheck, UploadCloud, XCircle } from "lucide-react";
 
 type VerificationDisplayProps = {
@@ -14,9 +16,14 @@ type VerificationDisplayProps = {
   sessionId: string | null;
   match: unknown;
   onVoice: (text: string) => void;
-  selectedDocuments: File[];
-  setSelectedDocuments: (v: File[]) => void;
-  handleFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  documentChecklist: DocumentChecklist;
+  selectedDocuments: SelectedDocument[];
+  setSelectedDocuments: (v: SelectedDocument[]) => void;
+  handleFileUpload: (
+    e: React.ChangeEvent<HTMLInputElement>,
+    requirement: { id: string; label: string },
+    checklist: DocumentChecklist,
+  ) => void;
   isVerifyingDocs: boolean;
   documentError: string;
   documentProgress: VerificationProgressStep[];
@@ -62,6 +69,27 @@ function ProgressTimeline({ steps }: { steps: VerificationProgressStep[] }) {
   );
 }
 
+function requirementTone(
+  requirement: DocumentRequirement,
+  checklist: DocumentChecklist,
+  selectedDocuments: SelectedDocument[],
+) {
+  const uploaded = selectedDocuments.some((entry) => entry.requirementId === requirement.id);
+  const required = requirement.requiredFor.includes(checklist.path);
+  if (uploaded) return "border-emerald-200 bg-emerald-50";
+  if (required) return "border-cyan-200 bg-white";
+  return "border-slate-200 bg-slate-50/80";
+}
+
+function humanizeBlocker(blocker: string) {
+  const labels: Record<string, string> = {
+    vision_id: "Webcam ID verification",
+    country_confirmation: "Country confirmation",
+    paid: "Payment",
+  };
+  return labels[blocker] ?? blocker.replaceAll("_", " ");
+}
+
 export function VerificationDisplay({
   show,
   stage,
@@ -73,6 +101,7 @@ export function VerificationDisplay({
   sessionId,
   match,
   onVoice,
+  documentChecklist,
   selectedDocuments,
   setSelectedDocuments,
   handleFileUpload,
@@ -84,6 +113,20 @@ export function VerificationDisplay({
   sendVision,
 }: VerificationDisplayProps) {
   if (!show) return null;
+  const missingRequiredIds = getMissingRequiredDocumentIds(
+    documentChecklist,
+    selectedDocuments.map((entry) => entry.requirementId),
+  );
+  const requiredCount = documentChecklist.requirements.filter((requirement) =>
+    requirement.requiredFor.includes(documentChecklist.path),
+  ).length;
+  const uploadedRequiredCount = requiredCount - missingRequiredIds.length;
+  const countryLabel =
+    documentChecklist.countryGroup === "us"
+      ? "United States checklist"
+      : documentChecklist.countryGroup === "africa"
+        ? "Africa checklist"
+        : "Global checklist";
 
   return (
     <section className="rounded-lg border border-white/40 bg-white/80 p-4 shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] backdrop-blur-xl sm:p-6">
@@ -129,7 +172,7 @@ export function VerificationDisplay({
         
         {!!visionBlockers.length && (
           <div className="flex items-center gap-2 rounded-lg border border-rose-100 bg-rose-50/50 px-3 py-2 text-xs font-medium text-rose-700">
-            <XCircle size={14} /> Blockers: {visionBlockers.join(", ")}
+            <XCircle size={14} /> Needs attention: {visionBlockers.map(humanizeBlocker).join(", ")}
           </div>
         )}
       </div>
@@ -159,17 +202,27 @@ export function VerificationDisplay({
       )}
       
       {stage === "doc_upload" && (
-        <div className="mt-8 flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-cyan-200 bg-cyan-50/30 p-8 text-center transition-colors hover:bg-cyan-50/50">
-          <div className="mb-3 rounded-lg bg-cyan-100 p-3 text-cyan-600">
-            <UploadCloud size={24} />
+        <div className="mt-8 rounded-lg border border-cyan-100 bg-cyan-50/30 p-4 sm:p-6">
+          <div className="flex flex-col gap-3 border-b border-cyan-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div className="mb-3 inline-flex rounded-lg bg-cyan-100 p-3 text-cyan-600">
+                <UploadCloud size={24} />
+              </div>
+              <p className="text-base font-semibold text-cyan-900">Upload Document Checklist</p>
+              <p className="mt-1 text-xs text-slate-500">
+                {countryLabel} · {documentChecklist.path === "digital" ? "digital certification" : documentChecklist.path === "self" ? "self verification" : "registration"} path
+              </p>
+            </div>
+            <div className="rounded-lg border border-cyan-100 bg-white px-3 py-2 text-left shadow-sm">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Required ready</p>
+              <p className="text-sm font-bold text-slate-800">{uploadedRequiredCount}/{requiredCount}</p>
+            </div>
           </div>
-          <p className="text-base font-semibold text-cyan-900">Upload Supporting Documents</p>
-          <p className="mt-1 text-xs text-slate-500">Business registration, tax, ownership, or incorporation documents. PDF/DOCX, max 3 files.</p>
 
           {documentError && (
             <div
               role="alert"
-              className="mt-5 flex w-full max-w-md items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-left text-xs font-medium text-rose-800 shadow-sm"
+              className="mt-5 flex w-full items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-left text-xs font-medium text-rose-800 shadow-sm"
             >
               <XCircle size={16} className="mt-0.5 shrink-0 text-rose-600" />
               <div>
@@ -179,50 +232,73 @@ export function VerificationDisplay({
             </div>
           )}
           
-          {!!selectedDocuments.length && (
-            <div className="mt-6 w-full max-w-md divide-y divide-cyan-100 rounded-lg border border-cyan-100 bg-white p-2 shadow-sm">
-              <div className="flex flex-col gap-2 p-3">
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Selected files ({selectedDocuments.length}/3)</p>
-                <ul className="space-y-1.5">
-                  {selectedDocuments.map((file) => (
-                    <li key={`${file.name}-${file.size}-${file.lastModified}`} className="flex items-center gap-2 truncate text-[11px] font-medium text-slate-600">
-                      <FileUp size={12} className="shrink-0 text-cyan-500" />
-                      {file.name}
-                    </li>
-                  ))}
-                </ul>
-                <button
-                  type="button"
-                  onClick={() => setSelectedDocuments([])}
-                  className="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50 py-1.5 text-[11px] font-semibold text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-800 disabled:opacity-50"
-                  disabled={isVerifyingDocs}
+          <div className="mt-5 grid gap-3">
+            {documentChecklist.requirements.map((requirement) => {
+              const uploaded = selectedDocuments.find((entry) => entry.requirementId === requirement.id);
+              const required = requirement.requiredFor.includes(documentChecklist.path);
+              return (
+                <div
+                  key={requirement.id}
+                  className={`rounded-lg border p-3 text-left shadow-sm ${requirementTone(requirement, documentChecklist, selectedDocuments)}`}
                 >
-                  Clear Selection
-                </button>
-              </div>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {uploaded ? (
+                          <CheckCircle2 size={15} className="text-emerald-600" />
+                        ) : (
+                          <FileUp size={15} className={required ? "text-cyan-600" : "text-slate-400"} />
+                        )}
+                        <p className="text-sm font-bold text-slate-800">{requirement.label}</p>
+                        <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                          required ? "bg-cyan-100 text-cyan-700" : "bg-slate-200 text-slate-500"
+                        }`}>
+                          {required ? "Required" : "Optional"}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs leading-relaxed text-slate-500">{requirement.description}</p>
+                      {uploaded && (
+                        <p className="mt-2 truncate text-[11px] font-semibold text-emerald-700">{uploaded.file.name}</p>
+                      )}
+                    </div>
+                    <label className="inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-lg border border-cyan-200 bg-white px-3 text-xs font-bold text-cyan-700 shadow-sm transition-colors hover:bg-cyan-50">
+                      <UploadCloud size={14} /> <span>{uploaded ? "Replace" : "Upload"}</span>
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept=".pdf,.doc,.docx"
+                        disabled={isVerifyingDocs}
+                        onChange={(event) => handleFileUpload(event, { id: requirement.id, label: requirement.label }, documentChecklist)}
+                      />
+                    </label>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {!!selectedDocuments.length && (
+            <div className="mt-5 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setSelectedDocuments([])}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-800 disabled:opacity-50"
+                disabled={isVerifyingDocs}
+              >
+                Clear All
+              </button>
             </div>
           )}
           
           {isVerifyingDocs ? (
             <>
-              <div className="mt-5 flex items-center gap-3 rounded-lg bg-cyan-600 px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-cyan-200">
+              <div className="mt-5 inline-flex items-center gap-3 rounded-lg bg-cyan-600 px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-cyan-200">
                 <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                VERIFYING DOCUMENT...
+                VERIFYING DOCUMENT CHECKLIST...
               </div>
               <ProgressTimeline steps={documentProgress} />
             </>
-          ) : (
-            <label className="mt-6 inline-flex cursor-pointer items-center gap-2 rounded-lg bg-gradient-to-r from-cyan-600 to-sky-600 px-8 py-3 text-sm font-bold text-white shadow-lg shadow-cyan-200 transition-all hover:-translate-y-0.5 hover:shadow-cyan-300 active:translate-y-0 active:scale-95">
-              <UploadCloud size={16} /> <span>Select Files</span>
-              <input
-                type="file"
-                className="hidden"
-                multiple
-                accept=".pdf,.doc,.docx"
-                onChange={handleFileUpload}
-              />
-            </label>
-          )}
+          ) : null}
         </div>
       )}
 
@@ -246,8 +322,7 @@ export function VerificationDisplay({
           <p className="flex items-center gap-2 font-bold">
             <CheckCircle2 size={17} /> Documents and webcam ID are complete.
           </p>
-          <p className="mt-1 text-xs text-emerald-700">
-            The blockchain self-verification certificate can now be generated below.
+          <p className="mt-1 text-xs text-emerald-700">Continue below to paid Digital Certification
           </p>
         </div>
       )}

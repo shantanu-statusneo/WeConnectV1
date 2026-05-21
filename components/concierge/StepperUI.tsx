@@ -99,7 +99,7 @@ export function StepperUI({
     <section className="rounded-lg border border-white/50 bg-white/70 p-4 shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] backdrop-blur-xl sm:p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-lg font-bold tracking-tight text-slate-900">Seller Registration Workflow</h2>
+          <h2 className="text-lg font-bold tracking-tight text-slate-900">Supplier Registration Workflow</h2>
           <p className="mt-1 text-xs text-slate-500">
             {match ? `${match.companyName} · Stage: ${stage}` : "Start with a company name, business name, or URL."}
           </p>

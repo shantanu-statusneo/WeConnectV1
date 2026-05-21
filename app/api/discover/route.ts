@@ -199,10 +199,12 @@ export async function POST(req: Request) {
       },
       classificationSummary: {
         naics: {
+          codes: codeClassification.naics.codes,
           sourceType: codeClassification.naics.sourceType,
           confidence: codeClassification.naics.confidence,
         },
         unspsc: {
+          codes: codeClassification.unspsc.codes,
           sourceType: codeClassification.unspsc.sourceType,
           confidence: codeClassification.unspsc.confidence,
         },
@@ -321,10 +323,12 @@ export async function POST(req: Request) {
     },
     classificationSummary: {
       naics: {
+        codes: codeClassification.naics.codes,
         sourceType: codeClassification.naics.sourceType,
         confidence: codeClassification.naics.confidence,
       },
       unspsc: {
+        codes: codeClassification.unspsc.codes,
         sourceType: codeClassification.unspsc.sourceType,
         confidence: codeClassification.unspsc.confidence,
       },

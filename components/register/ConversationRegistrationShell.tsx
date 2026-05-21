@@ -77,6 +77,50 @@ async function playPrompt(text: string, abortSignal?: AbortSignal) {
   const safeText = text.trim();
   if (!safeText) return;
 
+  const speakInBrowser = async () => {
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    if (abortSignal?.aborted) return;
+    window.speechSynthesis.cancel();
+    const voices = window.speechSynthesis.getVoices();
+    const clearVoicePattern = /google us english|microsoft (aria|jenny|guy|david|zira)|samantha|alex|daniel|karen/i;
+    const usableVoices = voices.filter((voice) => !/compact|novelty|whisper|trinoids|zarvox/i.test(voice.name));
+    const voice =
+      usableVoices.find((candidate) => clearVoicePattern.test(candidate.name) && /^en[-_]/i.test(candidate.lang)) ??
+      usableVoices.find((candidate) => /en-US|en_US/i.test(candidate.lang)) ??
+      usableVoices.find((candidate) => /^en[-_]/i.test(candidate.lang)) ??
+      voices[0] ??
+      null;
+    await new Promise<void>((resolve) => {
+      let handled = false;
+      const finish = () => {
+        if (!handled) {
+          handled = true;
+          resolve();
+        }
+      };
+      const utterance = new SpeechSynthesisUtterance(safeText);
+      utterance.lang = voice?.lang ?? "en-US";
+      utterance.rate = 0.98;
+      utterance.pitch = 1.08;
+      utterance.volume = 1;
+      if (voice) utterance.voice = voice;
+      utterance.onend = finish;
+      utterance.onerror = finish;
+      if (abortSignal) {
+        abortSignal.addEventListener(
+          "abort",
+          () => {
+            window.speechSynthesis.cancel();
+            finish();
+          },
+          { once: true },
+        );
+      }
+      window.speechSynthesis.resume();
+      window.speechSynthesis.speak(utterance);
+    });
+  };
+
   try {
     if (abortSignal?.aborted) return;
     const response = await fetch("/api/sarvam-tts", {
@@ -88,9 +132,13 @@ async function playPrompt(text: string, abortSignal?: AbortSignal) {
     const data = await response.json();
     if (!response.ok || !data.ok) {
       console.warn("[TTS] Request failed:", response.status, data?.error?.code, data?.error?.details || data?.error?.message);
+      await speakInBrowser();
       return;
     }
-    if (!data.audioBase64) return;
+    if (!data.audioBase64) {
+      await speakInBrowser();
+      return;
+    }
     if (abortSignal?.aborted) return;
 
     const audio = new Audio(`data:${data.mimeType ?? "audio/wav"};base64,${data.audioBase64}`);
@@ -115,7 +163,7 @@ async function playPrompt(text: string, abortSignal?: AbortSignal) {
       void audio.play().catch(finish);
     });
   } catch {
-    // TTS is best-effort; silent fallback keeps flow resilient.
+    await speakInBrowser();
   }
 }
 
@@ -233,7 +281,8 @@ export default function ConversationRegistrationShell({
 
   useEffect(() => {
     if (!running || messages.length > 0) return;
-    void askCurrent();
+    const timer = window.setTimeout(() => void askCurrent(), 0);
+    return () => window.clearTimeout(timer);
   }, [askCurrent, messages.length, running]);
 
   const processAnswer = useCallback(

@@ -49,6 +49,20 @@ function writePersistedSellerSession(
   );
 }
 
+function resolveResumeStage(input: {
+  stage?: string;
+  aiAssessmentReport?: AiAssessmentReport;
+  visionChecks?: { idPassed?: boolean };
+}) {
+  const documentsVerified = Boolean(input.aiAssessmentReport?.documents?.verified);
+  const identityVerified =
+    Boolean(input.visionChecks?.idPassed) ||
+    Boolean(input.aiAssessmentReport?.identity?.idFaceMatch) ||
+    input.stage === "voice_attestation";
+  if (documentsVerified && identityVerified) return "voice_attestation";
+  return input.stage;
+}
+
 export function useConciergeSession(
   match: Match | null,
   registration: RegistrationDraft,
@@ -95,10 +109,11 @@ export function useConciergeSession(
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ sessionId: sid, registration, paid, company }),
           });
+          const restoredStage = resolveResumeStage({ stage });
           await fetch("/api/session", {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ sessionId: sid, stage }),
+            body: JSON.stringify({ sessionId: sid, stage: restoredStage }),
           });
           setAssistant("Recovered your session after a server reset. Continuing verification.");
           return;
@@ -117,7 +132,8 @@ export function useConciergeSession(
       aiAssessmentReport?: AiAssessmentReport;
       workflow?: WorkflowState;
     };
-    if (j.stage && j.stage !== stage) setStage(j.stage);
+    const resumeStage = resolveResumeStage(j);
+    if (resumeStage && resumeStage !== stage) setStage(resumeStage);
     if (j.registration) {
       const workflowCertType = j.workflow?.certificationType;
       const selectedCertType =
@@ -133,13 +149,14 @@ export function useConciergeSession(
       if (JSON.stringify(serverRegistrationWithCert) !== JSON.stringify(registration)) {
         setRegistration(serverRegistrationWithCert);
       }
-      writePersistedSellerSession(sid, serverRegistrationWithCert, Boolean(j.paid), j.stage ?? stage);
+      writePersistedSellerSession(sid, serverRegistrationWithCert, Boolean(j.paid), resumeStage ?? stage);
     } else {
       const persisted = readPersistedSellerSession(sid);
       if (persisted?.registration.business_name.trim()) {
         setRegistration(persisted.registration);
         setPaid(persisted.paid);
-        if (persisted.stage && persisted.stage !== stage) setStage(persisted.stage);
+        const persistedStage = resolveResumeStage({ stage: persisted.stage });
+        if (persistedStage && persistedStage !== stage) setStage(persistedStage);
         await fetch("/api/session/registration", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -218,7 +235,8 @@ export function useConciergeSession(
       if (persisted?.registration.business_name.trim()) {
         setRegistration(persisted.registration);
         setPaid(persisted.paid);
-        if (persisted.stage) setStage(persisted.stage);
+        const persistedStage = resolveResumeStage({ stage: persisted.stage });
+        if (persistedStage) setStage(persistedStage);
       }
       const r = await fetch("/api/session", {
         method: "POST",
@@ -268,6 +286,11 @@ export function useConciergeSession(
     }, 450);
     return () => window.clearTimeout(timeout);
   }, [sessionId, registration, paid, saveRegistration]);
+
+  useEffect(() => {
+    if (!sessionId || !registration.business_name.trim()) return;
+    writePersistedSellerSession(sessionId, registration, paid, stage);
+  }, [sessionId, registration, paid, stage]);
 
   return { sessionId, saveRegistration, refreshSession, pollingEnabled, setPollingEnabled };
 }

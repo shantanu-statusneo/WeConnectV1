@@ -1,5 +1,5 @@
 // ── User & Auth ───────────────────────────────────────────────────────────────
-export type UserRole = "wob_owner" | "team_member" | "assessor" | "buyer" | "admin" | "super_admin";
+export type UserRole = "wob_owner" | "team_member" | "assessor" | "buyer" | "buyer_admin" | "admin" | "super_admin";
 
 export interface User {
   id: string;

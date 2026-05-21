@@ -96,7 +96,7 @@ export async function GET(
     page.drawRectangle({ x: 20, y: 748, width: 555, height: 74, color: black });
     page.drawRectangle({ x: 20, y: 734, width: 555, height: 14, color: yellow });
 
-    page.drawText("WEConnect Provisional Certificate", {
+    page.drawText("WEConnect Certificate", {
       x: left,
       y,
       size: 28,
@@ -138,18 +138,24 @@ export async function GET(
     });
     y -= 64;
 
-    page.drawText("has successfully completed the WEConnect verification process.", {
+    const isProvisional = cert.provenanceSummary?.certificateKind === "provisional";
+    page.drawText(
+      isProvisional
+        ? "has a paid Digital Certification request under supplier-admin review."
+        : "has successfully completed the WEConnect verification process.",
+      {
       x: left,
       y,
       size: 12,
       font: bodyFont,
       color: muted,
-    });
+      },
+    );
     y -= 30;
 
     const details: Array<[string, string]> = [
       ["Certificate ID", cert.id],
-      ["Certification Type", certificationLabel(workflow.certificationType)],
+      ["Certification Type", isProvisional ? "Provisional Digital Certification" : certificationLabel(workflow.certificationType)],
       ["Trust Score", `${report.trustScore}/100 (${report.riskLevel.toUpperCase()} RISK)`],
       ["Issued On", new Date(cert.issuedAt).toLocaleString()],
       ["Valid Through", new Date(validTill).toLocaleDateString()],
@@ -187,7 +193,7 @@ export async function GET(
       borderColor: rgb(0.8, 0.8, 0.8),
       borderWidth: 1,
     });
-    y = drawWrappedText(page, `Blockchain Anchor TX: ${cert.txHash}`, {
+    y = drawWrappedText(page, isProvisional ? `Review Reference: ${cert.txHash}` : `Blockchain Anchor TX: ${cert.txHash}`, {
       x: left,
       y: y - 20,
       maxWidth: contentWidth - 36,
@@ -197,34 +203,7 @@ export async function GET(
       font: bodyFont,
     });
 
-    const signatureY = 120;
-    page.drawLine({
-      start: { x: left, y: signatureY },
-      end: { x: left + 170, y: signatureY },
-      color: black,
-      thickness: 1,
-    });
-    page.drawLine({
-      start: { x: left + 250, y: signatureY },
-      end: { x: left + 420, y: signatureY },
-      color: black,
-      thickness: 1,
-    });
-    page.drawText("Verification Authority", {
-      x: left + 20,
-      y: signatureY - 16,
-      size: 9,
-      font: bodyFont,
-      color: muted,
-    });
-    page.drawText("QID Chain Anchor", {
-      x: left + 300,
-      y: signatureY - 16,
-      size: 9,
-      font: bodyFont,
-      color: muted,
-    });
-
+    
     page.drawRectangle({ x: 20, y: 20, width: 555, height: 26, color: black });
     page.drawText("Issued by WEConnect Trust Engine", {
       x: left,

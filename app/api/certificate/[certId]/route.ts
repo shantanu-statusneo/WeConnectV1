@@ -18,6 +18,7 @@ export async function GET(
   }
   const workflow = getDomainState(cert.sessionId);
   const report = workflow.trustReport ?? generateTrustReport(cert.sessionId, session);
+  const isProvisional = cert.provenanceSummary?.certificateKind === "provisional";
   const validTill =
     workflow.governance.validTill ??
     new Date(new Date(cert.issuedAt).setFullYear(new Date(cert.issuedAt).getFullYear() + 3)).toISOString();
@@ -26,11 +27,11 @@ export async function GET(
     ...cert,
     companyName: cert.companyName,
     certificationType: workflow.certificationType,
-    trustLevel: workflow.trustLevel,
-    status: cert.revoked ? "revoked" : "active",
+    trustLevel: isProvisional ? "self_certified" : workflow.trustLevel,
+    status: cert.revoked ? "revoked" : isProvisional ? "provisional" : "active",
     trustScore: report.trustScore,
     riskLevel: report.riskLevel,
-    blockchainHash: cert.txHash,
+    blockchainHash: isProvisional ? "" : cert.txHash,
     validTill,
     verificationSummary: {
       ownershipVerified: report.ownershipVerified,

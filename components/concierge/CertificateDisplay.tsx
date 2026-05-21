@@ -18,7 +18,18 @@ type CertificateDisplayProps = {
   speakWithLanguage: (v: string) => void;
 };
 
-export function CertificateDisplay({
+function humanizeBlocker(blocker: string) {
+  const labels: Record<string, string> = {
+    vision_id: "Webcam ID verification",
+    country_confirmation: "Country confirmation",
+    paid: "Payment",
+    chain_submit_failed: "Blockchain anchoring service",
+    chain_submit_failed_demo_fallback: "Blockchain anchoring service",
+  };
+  return labels[blocker] ?? blocker.replaceAll("_", " ");
+}
+
+export function CertificateDisplay({ 
   show,
   cert,
   verifyUrl,
@@ -62,13 +73,13 @@ export function CertificateDisplay({
          </div>
        ) : (
          <div className="text-center py-8">
-           <h2 className="text-xl font-bold tracking-tight text-slate-900">Generate Self Verification Certificate</h2>
-           <p className="mt-1 text-sm text-slate-500">Your documents and webcam ID check are complete. Anchor the certificate on blockchain and make it downloadable.</p>
+           <h2 className="text-xl font-bold tracking-tight text-slate-900">Self Verification Complete</h2>
+           <p className="mt-1 text-sm text-slate-500">Improve visibility and increase business outreach by up to 75% through stronger trust signals and buyer discovery placement.</p>
            
            {!!mergedBlockers.length && (
             <div className="mt-4 rounded-lg border border-rose-100 bg-rose-50 p-3 text-xs text-rose-700">
               <p className="font-bold">Missing Requirements:</p>
-              <p>{mergedBlockers.join(", ")}</p>
+              <p>{mergedBlockers.map(humanizeBlocker).join(", ")}</p>
             </div>
            )}
 
@@ -76,18 +87,18 @@ export function CertificateDisplay({
              type="button"
              onClick={() => {
                if (!readinessForIssue) {
-                 const pending = mergedBlockers.join(", ");
-                 const message = `Cannot issue certificate yet. Pending: ${pending}`;
+                 const pending = mergedBlockers.map(humanizeBlocker).join(", ");
+                 const message = `Cannot continue to paid digital certification yet. Pending: ${pending}`;
                  setAssistant(message);
                  speakWithLanguage(message);
                  return;
                }
-               anchorCert();
+               setManualFlowStep(2);
              }}
              disabled={anchoring}
              className="mt-8 inline-flex w-full max-w-sm items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 py-4 text-sm font-black uppercase tracking-widest text-white shadow-lg shadow-emerald-200 transition-all hover:-translate-y-0.5 disabled:opacity-50"
            >
-             <BadgeCheck size={17} /> {anchoring ? "Issuing Certificate..." : "Issue Certificate"}
+             <BadgeCheck size={17} /> Go for Digital Certification
            </button>
          </div>
        )}

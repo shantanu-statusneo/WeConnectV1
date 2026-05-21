@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   appendTerminal,
   getSession,
+  setSessionUploadedDocuments,
   upsertSessionAiDocumentAssessment,
 } from "@/lib/session-store";
 import { patchDomainState } from "@/lib/store/domain-store";
@@ -11,7 +12,18 @@ export async function POST(req: Request) {
   try {
     const body = (await req.json()) as {
       sessionId?: string;
-      documents?: Array<{ base64: string; mimeType: string }>;
+      documents?: Array<{
+        base64: string;
+        mimeType: string;
+        requirementId?: string;
+        requirementLabel?: string;
+        fileName?: string;
+      }>;
+      checklist?: {
+        countryGroup?: string;
+        certificationPath?: string;
+        requiredDocumentIds?: string[];
+      };
     };
 
     const sessionId = body.sessionId;
@@ -36,6 +48,15 @@ export async function POST(req: Request) {
     }
 
     appendTerminal(sessionId, `[DOC_UPLOAD] Starting AI extraction/verification for ${documents.length} files...`);
+    setSessionUploadedDocuments(
+      sessionId,
+      documents.map((document) => ({
+        requirementId: document.requirementId,
+        requirementLabel: document.requirementLabel,
+        fileName: document.fileName,
+        mimeType: document.mimeType,
+      })),
+    );
 
     const result = await runDocumentVerification(registration, documents, session?.companySnapshot);
 
@@ -48,6 +69,10 @@ export async function POST(req: Request) {
       verified: result.verified,
       confidence: result.confidence,
       summary: result.report,
+      countryGroup: body.checklist?.countryGroup,
+      certificationPath: body.checklist?.certificationPath,
+      submittedRequirementIds: documents.map((doc) => doc.requirementId).filter((id): id is string => Boolean(id)),
+      requiredDocumentIds: body.checklist?.requiredDocumentIds,
       checkedAt: new Date().toISOString(),
     });
     const refreshed = getSession(sessionId)?.aiAssessmentReport;

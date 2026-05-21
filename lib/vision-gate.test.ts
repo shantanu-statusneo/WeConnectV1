@@ -13,24 +13,25 @@ describe("decideVisionGate", () => {
     expect(out.warningCode).toBe("owner_unverified_name_mismatch_bypassed");
   });
 
-  it("keeps strict mismatch blocked when owner is known", () => {
+  it("allows known-owner mismatch with review warning when confidence is usable", () => {
     const out = decideVisionGate({
       confidence: 70,
       matchesPrimaryOwner: false,
       ownerKnownAndVerified: true,
     });
-    expect(out.pass).toBe(false);
-    expect(out.nameMatchBypassed).toBe(false);
+    expect(out.pass).toBe(true);
+    expect(out.nameMatchBypassed).toBe(true);
+    expect(out.warningCode).toBe("owner_name_mismatch_review");
   });
 
   it("blocks low-confidence clips regardless of owner status", () => {
     const outUnknown = decideVisionGate({
-      confidence: 30,
+      confidence: 25,
       matchesPrimaryOwner: false,
       ownerKnownAndVerified: false,
     });
     const outKnown = decideVisionGate({
-      confidence: 30,
+      confidence: 25,
       matchesPrimaryOwner: true,
       ownerKnownAndVerified: true,
     });

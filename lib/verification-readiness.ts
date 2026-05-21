@@ -1,6 +1,6 @@
 import { emptyRegistrationDraft, validateRegistration } from "./registration";
 import type { SessionRecord } from "./session-store";
-import { getDomainState } from "@/lib/store/domain-store";
+import { getDomainState } from "./store/domain-store";
 
 export function verificationReadiness(session: SessionRecord) {
   const workflow = getDomainState(session.id);
@@ -18,8 +18,11 @@ export function verificationReadiness(session: SessionRecord) {
   if (session.aiAssessmentReport?.documents && !session.aiAssessmentReport.documents.verified) {
     blockers.push("documents_review");
   }
-  if (requiresIdentity && !session.visionChecks?.idPassed) blockers.push("vision_id");
-  if (session.stage !== "anchoring") blockers.push("stage_not_anchoring");
+  const identityPassed =
+    Boolean(session.visionChecks?.idPassed) ||
+    Boolean(session.aiAssessmentReport?.identity?.idFaceMatch) ||
+    session.stage === "voice_attestation";
+  if (requiresIdentity && !identityPassed) blockers.push("vision_id");
   return {
     isReady: blockers.length === 0,
     blockers,
@@ -27,5 +30,3 @@ export function verificationReadiness(session: SessionRecord) {
     paid,
   };
 }
-
-//test
